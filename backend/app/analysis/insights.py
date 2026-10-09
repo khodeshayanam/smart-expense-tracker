@@ -67,17 +67,38 @@ def monthly_summary(db: Session, months: int = 12) -> list[dict]:
 
 
 def predict_next_month(db: Session) -> dict:
-    """Simple linear regression on monthly totals."""
+    """Linear regression on *complete* monthly totals only.
+
+    The current (possibly incomplete) month is excluded so the model
+    is not biased downward by partial data.
+    """
     summary = monthly_summary(db, months=18)
-    if len(summary) < 3:
+    current_month = pd.Timestamp.now().to_period("M").strftime("%Y-%m")
+
+    # keep only fully completed months
+    complete = [s for s in summary if s["month"] != current_month]
+
+    if len(complete) < 3:
+        # fallback: simple average of whatever we have
+        if not complete:
+            return {
+                "next_month_estimate": 0.0,
+                "confidence": "low",
+                "method": "insufficient_data",
+                "details": {"message": "Need at least 3 complete months of data"},
+            }
+        avg = sum(s["total"] for s in complete) / len(complete)
         return {
-            "next_month_estimate": 0.0,
+            "next_month_estimate": round(avg, 2),
             "confidence": "low",
-            "method": "insufficient_data",
-            "details": {"message": "Need at least 3 months of data"},
+            "method": "simple_average",
+            "details": {
+                "message": f"Only {len(complete)} complete month(s); using average",
+                "months_used": len(complete),
+            },
         }
 
-    totals = [s["total"] for s in summary]
+    totals = [s["total"] for s in complete]
     X = np.arange(len(totals)).reshape(-1, 1)
     y = np.array(totals)
 
@@ -86,14 +107,20 @@ def predict_next_month(db: Session) -> dict:
     next_pred = float(model.predict([[len(totals)]])[0])
     next_pred = max(0.0, next_pred)
 
-    # rough confidence based on R²
-    r2 = model.score(X, y)
-    if r2 > 0.7:
+    r2 = float(model.score(X, y))
+
+    # more honest confidence: R² alone is weak with few points
+    n = len(totals)
+    if n >= 8 and r2 > 0.6:
         confidence = "high"
-    elif r2 > 0.4:
+    elif n >= 5 and r2 > 0.35:
         confidence = "medium"
     else:
         confidence = "low"
+
+    # simple residual-based uncertainty band
+    residuals = y - model.predict(X)
+    residual_std = float(np.std(residuals)) if len(residuals) > 1 else 0.0
 
     return {
         "next_month_estimate": round(next_pred, 2),
@@ -102,7 +129,9 @@ def predict_next_month(db: Session) -> dict:
         "details": {
             "r2_score": round(r2, 3),
             "slope": round(float(model.coef_[0]), 2),
-            "months_used": len(totals),
+            "months_used": n,
+            "excluded_current_month": current_month,
+            "approx_uncertainty": round(residual_std, 2),
             "last_months": totals[-6:],
         },
     }
@@ -230,6 +259,14 @@ def suggest_category(db: Session, description: str) -> str | None:
 
 
 def habit_streak(db: Session, habit_id: int) -> dict:
+    """Calculate current and longest consecutive daily streaks.
+
+    Rules:
+    - Only completed logs count
+    - Current streak: consecutive days ending today or yesterday
+    - Gaps break the streak
+    - longest_streak is always >= current_streak
+    """
     logs = (
         db.query(HabitLog)
         .filter(HabitLog.habit_id == habit_id, HabitLog.completed == True)
@@ -239,33 +276,47 @@ def habit_streak(db: Session, habit_id: int) -> dict:
     if not logs:
         return {"current_streak": 0, "longest_streak": 0, "total_completed": 0}
 
-    dates = sorted({log.date for log in logs}, reverse=True)
-    current = 0
+    dates = sorted({log.date for log in logs})
+    total_completed = len(dates)
+
+    # --- current streak ---
     today = date.today()
-    expected = today
+    dates_set = set(dates)
 
-    for d in dates:
-        if d == expected or d == expected - timedelta(days=1):
+    # streak must end on today or yesterday (grace for not-yet-logged today)
+    if today in dates_set:
+        cursor = today
+    elif (today - timedelta(days=1)) in dates_set:
+        cursor = today - timedelta(days=1)
+    else:
+        current = 0
+        # fall through to longest calculation
+        current = 0
+        cursor = None
+
+    current = 0
+    if cursor is not None:
+        while cursor in dates_set:
             current += 1
-            expected = d - timedelta(days=1)
-        else:
-            break
+            cursor -= timedelta(days=1)
 
-    # longest streak
-    longest = 1
+    # --- longest streak ---
+    longest = 1 if dates else 0
     temp = 1
-    sorted_asc = sorted(dates)
-    for i in range(1, len(sorted_asc)):
-        if (sorted_asc[i] - sorted_asc[i - 1]).days == 1:
+    for i in range(1, len(dates)):
+        if (dates[i] - dates[i - 1]).days == 1:
             temp += 1
             longest = max(longest, temp)
         else:
             temp = 1
 
+    # invariant: longest >= current
+    longest = max(longest, current)
+
     return {
         "current_streak": current,
         "longest_streak": longest,
-        "total_completed": len(dates),
+        "total_completed": total_completed,
     }
 
 
@@ -285,6 +336,6 @@ def overall_stats(db: Session) -> dict[str, Any]:
         "total_spent": round(float(df["amount"].sum()), 2),
         "avg_daily": round(float(df["amount"].sum() / max((df["date"].max() - df["date"].min()).days, 1)), 2),
         "transaction_count": int(len(df)),
-        "top_category": df.groupby("category")["amount"].sum().idxmax(),
+        "top_category": df.groupby("category")["amount"].sum().idxmax(),  # highest spend, not frequency
         "this_month": round(float(this_month["amount"].sum()), 2),
     }

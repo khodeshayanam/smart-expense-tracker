@@ -1,6 +1,7 @@
 from datetime import date, datetime
-from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional
+from pydantic import BaseModel, Field, ConfigDict, field_validator
+from typing import Optional, Literal
+import re
 
 
 # ──────────── Category ────────────
@@ -8,6 +9,21 @@ class CategoryBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=80)
     icon: str = "📦"
     color: str = "#6366f1"
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("name cannot be empty or whitespace only")
+        return v
+
+    @field_validator("color")
+    @classmethod
+    def validate_hex_color(cls, v: str) -> str:
+        if not re.fullmatch(r"#[0-9A-Fa-f]{6}", v):
+            raise ValueError("color must be a valid hex like #6366f1")
+        return v.lower()
 
 
 class CategoryCreate(CategoryBase):
@@ -23,11 +39,28 @@ class CategoryOut(CategoryBase):
 
 # ──────────── Expense ────────────
 class ExpenseBase(BaseModel):
-    amount: float = Field(..., gt=0)
+    amount: float = Field(..., gt=0, le=1_000_000_000)
     description: str = Field(..., min_length=1, max_length=255)
     date: date
     category_id: int
     notes: Optional[str] = None
+
+    @field_validator("description")
+    @classmethod
+    def strip_description(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("description cannot be empty or whitespace only")
+        return v
+
+    @field_validator("date")
+    @classmethod
+    def no_far_future(cls, v: date) -> date:
+        # allow up to 1 year in the future for planned expenses
+        from datetime import timedelta
+        if v > date.today() + timedelta(days=365):
+            raise ValueError("date cannot be more than 1 year in the future")
+        return v
 
 
 class ExpenseCreate(ExpenseBase):
@@ -35,11 +68,21 @@ class ExpenseCreate(ExpenseBase):
 
 
 class ExpenseUpdate(BaseModel):
-    amount: Optional[float] = Field(None, gt=0)
+    amount: Optional[float] = Field(None, gt=0, le=1_000_000_000)
     description: Optional[str] = Field(None, min_length=1, max_length=255)
     date: Optional[date] = None
     category_id: Optional[int] = None
     notes: Optional[str] = None
+
+    @field_validator("description")
+    @classmethod
+    def strip_description(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            raise ValueError("description cannot be empty or whitespace only")
+        return v
 
 
 class ExpenseOut(ExpenseBase):
@@ -54,8 +97,16 @@ class ExpenseOut(ExpenseBase):
 class HabitBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
     description: Optional[str] = None
-    target_frequency: str = "daily"
+    target_frequency: Literal["daily", "weekly"] = "daily"
     icon: str = "✅"
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("name cannot be empty or whitespace only")
+        return v
 
 
 class HabitCreate(HabitBase):
@@ -75,6 +126,13 @@ class HabitLogCreate(BaseModel):
     date: date
     completed: bool = True
     notes: Optional[str] = None
+
+    @field_validator("date")
+    @classmethod
+    def no_future_log(cls, v: date) -> date:
+        if v > date.today():
+            raise ValueError("cannot log habit for a future date")
+        return v
 
 
 class HabitLogOut(HabitLogCreate):

@@ -21,13 +21,20 @@ def create_expense(payload: ExpenseCreate, db: Session = Depends(get_db)):
     db.add(expense)
     db.commit()
     db.refresh(expense)
+    # reload with category for response
+    expense = (
+        db.query(Expense)
+        .options(joinedload(Expense.category))
+        .filter(Expense.id == expense.id)
+        .first()
+    )
     return expense
 
 
 @router.get("/", response_model=list[ExpenseOut])
 def list_expenses(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     category_id: Optional[int] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
@@ -40,7 +47,17 @@ def list_expenses(
         q = q.filter(Expense.date >= start_date)
     if end_date:
         q = q.filter(Expense.date <= end_date)
-    return q.order_by(Expense.date.desc()).offset(skip).limit(limit).all()
+    return q.order_by(Expense.date.desc(), Expense.id.desc()).offset(skip).limit(limit).all()
+
+
+# IMPORTANT: static path must come BEFORE /{expense_id} to avoid route collision
+@router.get("/suggest-category")
+def auto_suggest_category(
+    description: str = Query(..., min_length=2),
+    db: Session = Depends(get_db),
+):
+    suggestion = suggest_category(db, description)
+    return {"suggested_category": suggestion}
 
 
 @router.get("/{expense_id}", response_model=ExpenseOut)
@@ -61,11 +78,36 @@ def update_expense(expense_id: int, payload: ExpenseUpdate, db: Session = Depend
     expense = db.get(Expense, expense_id)
     if not expense:
         raise HTTPException(404, "Expense not found")
+
     data = payload.model_dump(exclude_unset=True)
+
+    # Reject explicit nulls for non-nullable fields
+    if "amount" in data and data["amount"] is None:
+        raise HTTPException(422, "amount cannot be null")
+    if "description" in data and data["description"] is None:
+        raise HTTPException(422, "description cannot be null")
+    if "date" in data and data["date"] is None:
+        raise HTTPException(422, "date cannot be null")
+
+    # Validate category if provided
+    if "category_id" in data:
+        if data["category_id"] is None:
+            raise HTTPException(422, "category_id cannot be null")
+        cat = db.get(Category, data["category_id"])
+        if not cat:
+            raise HTTPException(400, "Invalid category_id")
+
     for k, v in data.items():
         setattr(expense, k, v)
+
     db.commit()
     db.refresh(expense)
+    expense = (
+        db.query(Expense)
+        .options(joinedload(Expense.category))
+        .filter(Expense.id == expense.id)
+        .first()
+    )
     return expense
 
 
@@ -76,9 +118,3 @@ def delete_expense(expense_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Expense not found")
     db.delete(expense)
     db.commit()
-
-
-@router.get("/suggest-category/")
-def auto_suggest_category(description: str = Query(..., min_length=2), db: Session = Depends(get_db)):
-    suggestion = suggest_category(db, description)
-    return {"suggested_category": suggestion}

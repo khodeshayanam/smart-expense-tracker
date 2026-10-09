@@ -40,6 +40,8 @@ def log_habit(payload: HabitLogCreate, db: Session = Depends(get_db)):
     habit = db.get(Habit, payload.habit_id)
     if not habit:
         raise HTTPException(400, "Invalid habit_id")
+    if not habit.is_active:
+        raise HTTPException(400, "Habit is inactive")
 
     existing = (
         db.query(HabitLog)

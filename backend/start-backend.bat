@@ -5,13 +5,13 @@ cd /d "%~dp0"
 
 echo.
 echo ========================================
-echo   در حال اجرای سرور Backend ...
+echo   Starting Backend Server ...
 echo ========================================
 echo.
 
 if not exist "venv\Scripts\activate.bat" (
-    echo [خطا] محیط مجازی پیدا نشد!
-    echo اول این دستورات را یکبار اجرا کن:
+    echo [ERROR] Virtual environment not found!
+    echo Run these commands once:
     echo   python -m venv venv
     echo   venv\Scripts\activate
     echo   pip install -r requirements.txt
@@ -21,11 +21,11 @@ if not exist "venv\Scripts\activate.bat" (
 )
 
 call venv\Scripts\activate.bat
-echo سرور در آدرس زیر اجرا می‌شود:
-echo http://127.0.0.1:8000
+echo Server running at: http://127.0.0.1:8000
+echo Docs:              http://127.0.0.1:8000/docs
 echo.
-echo برای توقف، Ctrl+C را بزنید.
+echo Press Ctrl+C to stop.
 echo.
 
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 pause

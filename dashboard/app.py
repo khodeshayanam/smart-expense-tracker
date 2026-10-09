@@ -7,6 +7,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import date, timedelta
+import html as html_module
 
 # ─────────────────────────────────────────────
 # تنظیمات صفحه (باید اولین دستور باشه)
@@ -185,7 +186,7 @@ if page == "📊 داشبورد":
         c4.metric("تعداد تراکنش", overview.get("transaction_count", 0))
 
         if overview.get("top_category"):
-            st.info(f"🏆 پرتکرارترین دسته: **{overview['top_category']}**")
+            st.info(f"🏆 پرهزینه‌ترین دسته: **{overview['top_category']}**")
 
     # نمودار ماهانه
     summary = api_get("/analytics/summary", params={"months": 12})
@@ -284,7 +285,7 @@ elif page == "➕ ثبت هزینه":
 
         # پیشنهاد هوشمند
         if description and len(description) > 2:
-            suggestion = api_get("/expenses/suggest-category/", params={"description": description})
+            suggestion = api_get("/expenses/suggest-category", params={"description": description})
             if suggestion and not suggestion.get("__error__") and suggestion.get("suggested_category"):
                 st.caption(f"🤖 پیشنهاد هوشمند: **{suggestion['suggested_category']}**")
 
@@ -431,6 +432,9 @@ elif page == "🏷️ دسته‌بندی‌ها":
         for i, c in enumerate(cats):
             with cols[i % 3]:
                 color = c.get("color", "#6366f1")
+                safe_name = html_module.escape(str(c.get("name", "")))
+                safe_icon = html_module.escape(str(c.get("icon", "")))
+                # color already validated as #RRGGBB by API
                 st.markdown(
                     f"""
                     <div style="
@@ -441,8 +445,8 @@ elif page == "🏷️ دسته‌بندی‌ها":
                         margin-bottom: 12px;
                         direction: rtl;
                     ">
-                        <span style="font-size: 1.5rem;">{c.get('icon', '')}</span>
-                        <b style="margin-right: 8px; color: #e2e8f0;">{c['name']}</b>
+                        <span style="font-size: 1.5rem;">{safe_icon}</span>
+                        <b style="margin-right: 8px; color: #e2e8f0;">{safe_name}</b>
                     </div>
                     """,
                     unsafe_allow_html=True,
