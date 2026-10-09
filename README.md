@@ -1,180 +1,92 @@
-# 💰 Smart Expense & Habit Tracker
+# 💰 مدیریت هزینه و عادت هوشمند
 
-> یک سیستم کامل مدیریت هزینه و پیگیری عادت‌ها با تحلیل آماری، پیش‌بینی با یادگیری ماشین و داشبورد تعاملی زیبا.
+یک سیستم شخصی برای ثبت هزینه‌ها، پیگیری عادت‌ها، تحلیل آماری و پیش‌بینی هزینه ماه بعد.
 
-![Python](https://img.shields.io/badge/Python-3.11+-blue?logo=python)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi)
-![Streamlit](https://img.shields.io/badge/Streamlit-1.39-FF4B4B?logo=streamlit)
-![scikit-learn](https://img.shields.io/badge/scikit--learn-1.5-F7931E?logo=scikitlearn)
-![License](https://img.shields.io/badge/License-MIT-green)
+**رابط کاربری کاملاً فارسی + تم تاریک**
 
 ---
 
-## ✨ ویژگی‌ها
+## ویژگی‌ها
 
-### مدیریت هزینه‌ها
-- افزودن، ویرایش و حذف هزینه‌ها همراه با دسته‌بندی
-- سیستم دسته‌بندی زیبا با آیکون و رنگ
-- **پیشنهاد هوشمند دسته‌بندی** با استفاده از TF-IDF + Naive Bayes
-- فیلتر کامل بر اساس بازه زمانی و دسته‌بندی
-
-### پیگیری عادت‌ها
-- ساخت عادت‌های روزانه و هفتگی
-- ثبت سریع انجام عادت با یک کلیک
-- نمایش **streak فعلی**، طولانی‌ترین streak و آمار کلی
-
-### تحلیل‌های هوشمند
-| ویژگی | تکنیک مورد استفاده |
-|-------|---------------------|
-| روند هزینه ماهانه | Aggregation + نمودارهای Plotly |
-| پیش‌بینی ماه بعد | Linear Regression |
-| الگوهای خرج کردن | قوانین آماری + تحلیل روز هفته و دسته‌بندی |
-| دسته‌بندی خودکار | TF-IDF + Multinomial Naive Bayes |
-| محاسبه Streak عادت‌ها | الگوریتم‌های توالی تاریخ |
-
-### داشبورد
-- متریک‌های لحظه‌ای
-- نمودارهای تعاملی Plotly (میله‌ای + دونات)
-- رابط کاربری تم تاریک و تمیز
-- کاملاً واکنش‌گرا (Responsive)
+- ثبت و مدیریت هزینه‌ها با دسته‌بندی
+- پیشنهاد هوشمند دسته‌بندی (یادگیری ماشین)
+- پیگیری عادت‌ها با محاسبه streak
+- نمودارهای تعاملی روند هزینه
+- پیش‌بینی هزینه ماه بعد
+- رابط کاربری فارسی و راست‌چین
 
 ---
 
-## 🏗️ ساختار پروژه
+## ساختار پروژه
 
 ```
 smart-expense-tracker/
-├── backend/                 # FastAPI REST API
+├── backend/                  ← سرور API
+│   ├── start-backend.bat     ← دوبار کلیک = اجرای سرور
 │   ├── app/
-│   │   ├── main.py
-│   │   ├── models.py        # مدل‌های SQLAlchemy
-│   │   ├── schemas.py       # اسکیماهای Pydantic
-│   │   ├── database.py
-│   │   ├── routers/         # expenses, categories, habits, analytics
-│   │   └── analysis/        # insights, prediction, ML
-│   ├── seed_demo_data.py
-│   └── requirements.txt
-├── dashboard/               # فرانت‌اند Streamlit
+│   ├── requirements.txt
+│   └── seed_demo_data.py
+├── dashboard/                ← رابط کاربری
+│   ├── start-dashboard.bat   ← دوبار کلیک = اجرای داشبورد
 │   ├── app.py
 │   └── requirements.txt
 └── README.md
 ```
 
-**تکنولوژی‌ها**
-- **Backend**: FastAPI + SQLAlchemy + SQLite (بدون نیاز به تنظیمات پیچیده)
-- **Frontend**: Streamlit + Plotly
-- **ML / Stats**: pandas, scikit-learn, numpy
-- **مستندات API**: Swagger UI خودکار در آدرس `/docs`
-
 ---
 
-## 🚀 راه‌اندازی سریع
+## راه‌اندازی (فقط بار اول)
 
 ### پیش‌نیاز
-- پایتون ۳.۱۰ یا بالاتر
+پایتون ۳.۱۰ یا بالاتر نصب باشد.
 
 ### ۱. Backend
 
 ```bash
 cd backend
 python -m venv venv
-
-# ویندوز:
-venv\Scripts\activate
-
-# مک / لینوکس:
-source venv/bin/activate
-
+venv\Scripts\activate          # ویندوز
 pip install -r requirements.txt
-
-# وارد کردن داده‌های نمونه (۹۰ روز هزینه و عادت واقعی‌نما)
 python seed_demo_data.py
-
-# اجرای API
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-API در آدرس زیر در دسترس است:  
-http://127.0.0.1:8000  
-
-مستندات تعاملی:  
-http://127.0.0.1:8000/docs
-
 ### ۲. Dashboard
-
-یک ترمینال جدید باز کنید:
 
 ```bash
 cd dashboard
 pip install -r requirements.txt
-streamlit run app.py
 ```
 
-آدرس داشبورد معمولاً این است:  
-http://localhost:8501
+---
 
-> اول Backend را اجرا کنید. آدرس API را می‌توانید از سایدبار داشبورد تغییر دهید.
+## اجرای روزمره (خیلی ساده)
+
+از این به بعد فقط این دو کار را انجام بده:
+
+1. فایل **`backend/start-backend.bat`** را دوبار کلیک کن
+2. فایل **`dashboard/start-dashboard.bat`** را دوبار کلیک کن
+
+داشبورد در آدرس زیر باز می‌شود:  
+**http://localhost:8501**
 
 ---
 
-## 📡 مهم‌ترین Endpointهای API
+## نکات مهم
 
-| متد | Endpoint | توضیح |
-|-----|----------|--------|
-| `POST` | `/api/categories/seed` | ساخت دسته‌بندی‌های پیش‌فرض |
-| `GET`  | `/api/categories/` | لیست تمام دسته‌بندی‌ها |
-| `POST` | `/api/expenses/` | ایجاد هزینه جدید |
-| `GET`  | `/api/expenses/` | لیست / فیلتر هزینه‌ها |
-| `GET`  | `/api/expenses/suggest-category/?description=...` | پیشنهاد هوشمند دسته‌بندی |
-| `POST` | `/api/habits/` | ایجاد عادت |
-| `POST` | `/api/habits/log` | ثبت انجام عادت |
-| `GET`  | `/api/habits/{id}/streak` | آمار streak |
-| `GET`  | `/api/analytics/overview` | شاخص‌های کلی |
-| `GET`  | `/api/analytics/summary` | خلاصه ماهانه |
-| `GET`  | `/api/analytics/predict` | پیش‌بینی ماه بعد |
-| `GET`  | `/api/analytics/insights` | الگوهای شناسایی‌شده |
+- اول Backend را روشن کن، بعد Dashboard
+- اگر پیام «سرور روشن نیست» دیدی، یعنی Backend اجرا نشده
+- داده‌های نمونه با دستور `python seed_demo_data.py` وارد می‌شوند
 
 ---
 
-## 🧠 نحوه کار هوشمندی سیستم
+## تکنولوژی‌ها
 
-1. **پیش‌بینی**  
-   مجموع هزینه‌های ماهانه → Linear Regression → تخمین ماه بعد + میزان اطمینان (R²)
-
-2. **شناسایی الگو**  
-   - تشخیص ناهنجاری روزهای هفته  
-   - تحلیل تمرکز روی دسته‌بندی‌ها  
-   - مقایسه روند ماه‌به‌ماه  
-   - تشخیص نقاط پرت (۹۵مین صدک)
-
-3. **دسته‌بندی خودکار**  
-   بعد از حدود ۱۵ هزینه، با TF-IDF + Multinomial Naive Bayes دسته‌بندی مناسب را از روی توضیح پیشنهاد می‌دهد.
+- Backend: FastAPI + SQLAlchemy + SQLite
+- Frontend: Streamlit + Plotly
+- یادگیری ماشین: scikit-learn (Naive Bayes + Linear Regression)
 
 ---
 
-## 🛠️ تغییر به PostgreSQL
+## لایسنس
 
-فقط یک خط در فایل `backend/app/database.py` را تغییر دهید:
-
-```python
-DATABASE_URL = "postgresql://user:password@localhost:5432/expense_tracker"
-```
-
-بقیه چیزها بدون تغییر کار می‌کند (SQLAlchemy خودش مدیریت می‌کند).
-
----
-
-## 📦 ایده‌های آینده
-
-- [ ] احراز هویت JWT + پشتیبانی چندکاربره
-- [ ] خروجی Excel / گزارش PDF
-- [ ] ربات تلگرام
-- [ ] محدودیت بودجه + هشدار
-- [ ] Docker Compose برای اجرای یک‌مرحله‌ای
-- [ ] فرانت‌اند جایگزین با React
-
----
-
-## 📄 لایسنس
-
-MIT © 2026
+MIT

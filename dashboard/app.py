@@ -1,5 +1,5 @@
 """
-Smart Expense & Habit Tracker — Professional Streamlit Dashboard
+Smart Expense & Habit Tracker — داشبورد فارسی
 """
 import streamlit as st
 import requests
@@ -7,283 +7,445 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import date, timedelta
-from dateutil.relativedelta import relativedelta
 
 # ─────────────────────────────────────────────
-# Config
+# تنظیمات صفحه (باید اولین دستور باشه)
 # ─────────────────────────────────────────────
 st.set_page_config(
-    page_title="Smart Expense Tracker",
+    page_title="مدیریت هزینه هوشمند",
     page_icon="💰",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-API_URL = st.sidebar.text_input("API Base URL", value="http://127.0.0.1:8000/api")
-
-# Custom CSS
-st.markdown(
-    """
+# ─────────────────────────────────────────────
+# استایل تاریک + راست‌چین فارسی
+# ─────────────────────────────────────────────
+st.markdown("""
 <style>
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1.2rem;
+    /* راست‌چین کل صفحه */
+    html, body, [class*="css"] {
+        direction: rtl;
+        text-align: right;
+        font-family: Tahoma, "Segoe UI", Arial, sans-serif !important;
+    }
+
+    /* پس‌زمینه تاریک */
+    .stApp {
+        background-color: #0f1117;
+        color: #e2e8f0;
+    }
+
+    /* سایدبار */
+    section[data-testid="stSidebar"] {
+        background-color: #161b22 !important;
+        border-left: 1px solid #30363d;
+    }
+
+    /* کارت متریک */
+    div[data-testid="stMetric"] {
+        background: linear-gradient(145deg, #1e293b, #0f172a);
+        padding: 16px 20px;
         border-radius: 12px;
-        color: white;
-        text-align: center;
+        border: 1px solid #334155;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
-    .stMetric {
-        background-color: #1e1e2f;
-        padding: 12px;
-        border-radius: 10px;
+    div[data-testid="stMetric"] label {
+        color: #94a3b8 !important;
     }
-    h1, h2, h3 { color: #e2e8f0; }
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
+        color: #f1f5f9 !important;
+        font-size: 1.6rem !important;
+    }
+
+    /* دکمه‌ها */
+    .stButton > button {
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+    }
+
+    /* عنوان‌ها */
+    h1, h2, h3 {
+        color: #f8fafc !important;
+    }
+
+    /* پیام موفقیت و خطا */
+    .stSuccess, .stError, .stInfo, .stWarning {
+        direction: rtl;
+        text-align: right;
+    }
+
+    /* جداول */
+    .stDataFrame {
+        direction: rtl;
+    }
+
+    /* مخفی کردن منوی استریملت */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
 </style>
-""",
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
 
+# ─────────────────────────────────────────────
+# آدرس API
+# ─────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("### ⚙️ تنظیمات")
+    API_URL = st.text_input(
+        "آدرس API",
+        value="http://127.0.0.1:8000/api",
+        help="اگر سرور روی پورت دیگه‌ای اجرا شده، اینجا تغییر بده"
+    )
+    st.markdown("---")
 
+# ─────────────────────────────────────────────
+# توابع ارتباط با API
+# ─────────────────────────────────────────────
 def api_get(path: str, params=None):
     try:
-        r = requests.get(f"{API_URL}{path}", params=params, timeout=8)
+        r = requests.get(f"{API_URL}{path}", params=params, timeout=6)
         r.raise_for_status()
         return r.json()
+    except requests.exceptions.ConnectionError:
+        return {"__error__": "connection"}
     except Exception as e:
-        st.error(f"API Error: {e}")
-        return None
+        return {"__error__": str(e)}
 
 
-def api_post(path: str, json_data: dict):
+def api_post(path: str, json_data: dict = None):
     try:
-        r = requests.post(f"{API_URL}{path}", json=json_data, timeout=8)
+        r = requests.post(f"{API_URL}{path}", json=json_data or {}, timeout=6)
         r.raise_for_status()
         return r.json()
+    except requests.exceptions.ConnectionError:
+        return {"__error__": "connection"}
     except Exception as e:
-        st.error(f"API Error: {e}")
-        return None
+        return {"__error__": str(e)}
+
+
+def show_api_error(result):
+    """اگر API خطا داد، پیام واضح نشون بده"""
+    if result is None:
+        return True
+    if isinstance(result, dict) and result.get("__error__") == "connection":
+        st.error("""
+        🔴 **سرور روشن نیست!**
+        
+        اول Backend رو اجرا کن:
+        1. برو به پوشه `backend`
+        2. فایل `start-backend.bat` رو دوبار کلیک کن
+        یا این دستور رو بزن:
+        ```
+        uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+        ```
+        """)
+        return True
+    if isinstance(result, dict) and result.get("__error__"):
+        st.error(f"خطا در ارتباط با سرور: {result['__error__']}")
+        return True
+    return False
 
 
 # ─────────────────────────────────────────────
-# Sidebar Navigation
+# منوی سایدبار
 # ─────────────────────────────────────────────
-st.sidebar.title("💰 Smart Tracker")
+st.sidebar.markdown("## 💰 مدیریت هزینه")
 page = st.sidebar.radio(
-    "Navigation",
-    ["Dashboard", "Add Expense", "Habits", "Insights & Forecast", "Categories"],
+    "منو",
+    [
+        "📊 داشبورد",
+        "➕ ثبت هزینه",
+        "✅ عادت‌ها",
+        "🔮 تحلیل و پیش‌بینی",
+        "🏷️ دسته‌بندی‌ها",
+    ],
     label_visibility="collapsed",
 )
 
+st.sidebar.markdown("---")
+st.sidebar.caption("نسخه ۱.۱ · FastAPI + Streamlit")
+
 # ─────────────────────────────────────────────
-# DASHBOARD
+# صفحه داشبورد
 # ─────────────────────────────────────────────
-if page == "Dashboard":
-    st.title("📊 Overview Dashboard")
+if page == "📊 داشبورد":
+    st.title("📊 داشبورد کلی")
+    st.caption("خلاصه وضعیت مالی و عادت‌های شما")
 
     overview = api_get("/analytics/overview")
+    if show_api_error(overview):
+        st.stop()
+
     if overview:
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total Spent", f"{overview['total_spent']:,.0f}")
-        c2.metric("This Month", f"{overview['this_month']:,.0f}")
-        c3.metric("Avg Daily", f"{overview['avg_daily']:,.0f}")
-        c4.metric("Transactions", overview["transaction_count"])
+        c1.metric("مجموع هزینه‌ها", f"{overview.get('total_spent', 0):,.0f}")
+        c2.metric("این ماه", f"{overview.get('this_month', 0):,.0f}")
+        c3.metric("میانگین روزانه", f"{overview.get('avg_daily', 0):,.0f}")
+        c4.metric("تعداد تراکنش", overview.get("transaction_count", 0))
 
         if overview.get("top_category"):
-            st.info(f"🏆 Top category: **{overview['top_category']}**")
+            st.info(f"🏆 پرتکرارترین دسته: **{overview['top_category']}**")
 
-    # Monthly chart
+    # نمودار ماهانه
     summary = api_get("/analytics/summary", params={"months": 12})
-    if summary:
+    if summary and not show_api_error(summary) and isinstance(summary, list) and summary:
         df_month = pd.DataFrame(summary)
-        if not df_month.empty:
+        if not df_month.empty and "month" in df_month.columns:
             fig = px.bar(
                 df_month,
                 x="month",
                 y="total",
-                title="Monthly Spending Trend",
+                title="روند هزینه ماهانه",
                 color="total",
-                color_continuous_scale="Viridis",
+                color_continuous_scale="Teal",
+                labels={"month": "ماه", "total": "مبلغ"},
             )
-            fig.update_layout(height=400, template="plotly_dark")
+            fig.update_layout(
+                height=380,
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(family="Tahoma"),
+            )
             st.plotly_chart(fig, use_container_width=True)
 
-            # Category breakdown of last month
+            # نمودار دایره‌ای آخرین ماه
             last = summary[-1] if summary else None
             if last and last.get("by_category"):
                 cat_df = pd.DataFrame(
-                    list(last["by_category"].items()), columns=["Category", "Amount"]
+                    list(last["by_category"].items()),
+                    columns=["دسته", "مبلغ"]
                 )
                 fig2 = px.pie(
                     cat_df,
-                    values="Amount",
-                    names="Category",
-                    title=f"Category Split — {last['month']}",
-                    hole=0.4,
+                    values="مبلغ",
+                    names="دسته",
+                    title=f"تقسیم‌بندی دسته‌ها — {last.get('month', '')}",
+                    hole=0.45,
                 )
-                fig2.update_layout(height=400, template="plotly_dark")
+                fig2.update_layout(
+                    height=380,
+                    template="plotly_dark",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    font=dict(family="Tahoma"),
+                )
                 st.plotly_chart(fig2, use_container_width=True)
 
-    # Recent expenses table
-    st.subheader("Recent Expenses")
-    expenses = api_get("/expenses/", params={"limit": 20})
-    if expenses:
+    # جدول آخرین هزینه‌ها
+    st.subheader("آخرین هزینه‌ها")
+    expenses = api_get("/expenses/", params={"limit": 15})
+    if expenses and not show_api_error(expenses) and isinstance(expenses, list):
         df = pd.DataFrame(expenses)
         if not df.empty:
-            df["category_name"] = df["category"].apply(
-                lambda x: x["name"] if isinstance(x, dict) else ""
+            df["دسته"] = df["category"].apply(
+                lambda x: x.get("name", "") if isinstance(x, dict) else ""
             )
-            st.dataframe(
-                df[["date", "description", "amount", "category_name"]].rename(
-                    columns={
-                        "date": "Date",
-                        "description": "Description",
-                        "amount": "Amount",
-                        "category_name": "Category",
-                    }
-                ),
-                use_container_width=True,
-                hide_index=True,
+            display_df = df[["date", "description", "amount", "دسته"]].rename(
+                columns={
+                    "date": "تاریخ",
+                    "description": "توضیح",
+                    "amount": "مبلغ",
+                }
             )
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("هنوز هزینه‌ای ثبت نشده.")
+    elif not show_api_error(expenses):
+        st.info("هنوز هزینه‌ای ثبت نشده.")
 
 # ─────────────────────────────────────────────
-# ADD EXPENSE
+# ثبت هزینه جدید
 # ─────────────────────────────────────────────
-elif page == "Add Expense":
-    st.title("➕ Add New Expense")
+elif page == "➕ ثبت هزینه":
+    st.title("➕ ثبت هزینه جدید")
 
-    cats = api_get("/categories/") or []
-    cat_options = {f"{c['icon']} {c['name']}": c["id"] for c in cats}
+    cats = api_get("/categories/")
+    if show_api_error(cats):
+        st.stop()
+
+    cats = cats or []
+    cat_options = {f"{c.get('icon', '')} {c['name']}": c["id"] for c in cats}
+
+    if not cat_options:
+        st.warning("هنوز دسته‌بندی وجود ندارد. اول به صفحه «دسته‌بندی‌ها» برو و دکمه‌ی ساخت دسته‌های پیش‌فرض را بزن.")
+        st.stop()
 
     with st.form("expense_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
-        amount = col1.number_input("Amount", min_value=0.01, step=1000.0, format="%.0f")
-        exp_date = col2.date_input("Date", value=date.today())
-        description = st.text_input("Description", placeholder="e.g. Lunch at cafe")
-        category = st.selectbox("Category", options=list(cat_options.keys()) if cat_options else ["No categories"])
-        notes = st.text_area("Notes (optional)")
+        with col1:
+            amount = st.number_input("مبلغ (تومان)", min_value=1.0, step=1000.0, format="%.0f")
+        with col2:
+            exp_date = st.date_input("تاریخ", value=date.today())
 
-        # Auto-suggest
-        if description and len(description) > 3:
+        description = st.text_input("توضیح", placeholder="مثال: ناهار رستوران")
+        category = st.selectbox("دسته‌بندی", options=list(cat_options.keys()))
+        notes = st.text_area("یادداشت (اختیاری)", height=80)
+
+        # پیشنهاد هوشمند
+        if description and len(description) > 2:
             suggestion = api_get("/expenses/suggest-category/", params={"description": description})
-            if suggestion and suggestion.get("suggested_category"):
-                st.caption(f"🤖 AI suggests: **{suggestion['suggested_category']}**")
+            if suggestion and not suggestion.get("__error__") and suggestion.get("suggested_category"):
+                st.caption(f"🤖 پیشنهاد هوشمند: **{suggestion['suggested_category']}**")
 
-        submitted = st.form_submit_button("Save Expense", type="primary")
+        submitted = st.form_submit_button("💾 ذخیره هزینه", type="primary", use_container_width=True)
+
         if submitted:
-            if not cat_options:
-                st.error("Please seed categories first (go to Categories page)")
-            else:
-                payload = {
-                    "amount": amount,
-                    "description": description,
-                    "date": exp_date.isoformat(),
-                    "category_id": cat_options[category],
-                    "notes": notes or None,
-                }
-                result = api_post("/expenses/", payload)
-                if result:
-                    st.success("✅ Expense saved successfully!")
+            payload = {
+                "amount": amount,
+                "description": description,
+                "date": exp_date.isoformat(),
+                "category_id": cat_options[category],
+                "notes": notes or None,
+            }
+            result = api_post("/expenses/", payload)
+            if show_api_error(result):
+                pass
+            elif result:
+                st.success("✅ هزینه با موفقیت ذخیره شد!")
+                st.balloons()
 
 # ─────────────────────────────────────────────
-# HABITS
+# عادت‌ها
 # ─────────────────────────────────────────────
-elif page == "Habits":
-    st.title("✅ Habit Tracker")
+elif page == "✅ عادت‌ها":
+    st.title("✅ پیگیری عادت‌ها")
 
-    tab1, tab2 = st.tabs(["My Habits", "Add Habit"])
+    tab1, tab2 = st.tabs(["عادت‌های من", "ساخت عادت جدید"])
 
     with tab1:
-        habits = api_get("/habits/") or []
-        if not habits:
-            st.info("No habits yet. Create one in the next tab!")
-        for h in habits:
-            with st.expander(f"{h['icon']} {h['name']}", expanded=True):
-                st.write(h.get("description") or "_No description_")
-                streak = api_get(f"/habits/{h['id']}/streak")
-                if streak:
-                    c1, c2, c3 = st.columns(3)
-                    c1.metric("Current Streak", f"{streak['current_streak']} 🔥")
-                    c2.metric("Longest", streak["longest_streak"])
-                    c3.metric("Total Done", streak["total_completed"])
+        habits = api_get("/habits/")
+        if show_api_error(habits):
+            st.stop()
 
-                if st.button(f"Mark Done Today", key=f"done_{h['id']}"):
-                    result = api_post(
-                        "/habits/log",
-                        {"habit_id": h["id"], "date": date.today().isoformat(), "completed": True},
-                    )
-                    if result:
-                        st.success("Logged! 🎉")
-                        st.rerun()
+        habits = habits or []
+        if not habits:
+            st.info("هنوز عادتی نساختی. از تب کنار، یک عادت جدید بساز.")
+        else:
+            for h in habits:
+                with st.container():
+                    st.markdown(f"### {h.get('icon', '✅')} {h['name']}")
+                    if h.get("description"):
+                        st.caption(h["description"])
+
+                    streak = api_get(f"/habits/{h['id']}/streak")
+                    if streak and not streak.get("__error__"):
+                        c1, c2, c3 = st.columns(3)
+                        c1.metric("streak فعلی", f"{streak.get('current_streak', 0)} 🔥")
+                        c2.metric("طولانی‌ترین", streak.get("longest_streak", 0))
+                        c3.metric("کل انجام‌شده", streak.get("total_completed", 0))
+
+                    if st.button("✓ امروز انجام شد", key=f"done_{h['id']}", type="primary"):
+                        result = api_post(
+                            "/habits/log",
+                            {
+                                "habit_id": h["id"],
+                                "date": date.today().isoformat(),
+                                "completed": True,
+                            },
+                        )
+                        if result and not result.get("__error__"):
+                            st.success("ثبت شد! 🎉")
+                            st.rerun()
+                    st.markdown("---")
 
     with tab2:
         with st.form("habit_form"):
-            name = st.text_input("Habit name", placeholder="e.g. Read 20 pages")
-            icon = st.text_input("Icon (emoji)", value="✅")
-            desc = st.text_area("Description")
-            freq = st.selectbox("Frequency", ["daily", "weekly"])
-            if st.form_submit_button("Create Habit"):
-                result = api_post(
-                    "/habits/",
-                    {"name": name, "icon": icon, "description": desc, "target_frequency": freq},
-                )
-                if result:
-                    st.success("Habit created!")
-                    st.rerun()
+            name = st.text_input("نام عادت", placeholder="مثال: مطالعه ۲۰ صفحه")
+            icon = st.text_input("آیکون (ایموجی)", value="📚")
+            desc = st.text_area("توضیح (اختیاری)")
+            freq = st.selectbox("تکرار", ["daily", "weekly"], format_func=lambda x: "روزانه" if x == "daily" else "هفتگی")
+
+            if st.form_submit_button("ساخت عادت", type="primary", use_container_width=True):
+                if not name.strip():
+                    st.error("نام عادت را وارد کن.")
+                else:
+                    result = api_post(
+                        "/habits/",
+                        {
+                            "name": name,
+                            "icon": icon,
+                            "description": desc,
+                            "target_frequency": freq,
+                        },
+                    )
+                    if result and not result.get("__error__"):
+                        st.success("عادت ساخته شد!")
+                        st.rerun()
 
 # ─────────────────────────────────────────────
-# INSIGHTS & FORECAST
+# تحلیل و پیش‌بینی
 # ─────────────────────────────────────────────
-elif page == "Insights & Forecast":
-    st.title("🔮 Smart Insights & Forecast")
+elif page == "🔮 تحلیل و پیش‌بینی":
+    st.title("🔮 تحلیل هوشمند و پیش‌بینی")
 
     pred = api_get("/analytics/predict")
-    if pred:
-        st.subheader("📈 Next Month Prediction")
+    if show_api_error(pred):
+        st.stop()
+
+    if pred and not pred.get("__error__"):
+        st.subheader("📈 پیش‌بینی ماه بعد")
         col1, col2, col3 = st.columns(3)
-        col1.metric("Estimated Spend", f"{pred['next_month_estimate']:,.0f}")
-        col2.metric("Confidence", pred["confidence"].upper())
-        col3.metric("Method", pred["method"].replace("_", " ").title())
+        col1.metric("تخمین هزینه", f"{pred.get('next_month_estimate', 0):,.0f}")
+        col2.metric("میزان اطمینان", str(pred.get("confidence", "")).upper())
+        col3.metric("روش", str(pred.get("method", "")).replace("_", " ").title())
 
         if pred.get("details"):
-            with st.expander("Model details"):
+            with st.expander("جزئیات مدل"):
                 st.json(pred["details"])
 
-    st.subheader("💡 Detected Patterns")
-    insights = api_get("/analytics/insights") or []
-    for ins in insights:
-        color = {"warning": "🟠", "success": "🟢", "info": "🔵"}.get(ins["severity"], "⚪")
-        st.markdown(f"{color} **{ins['title']}**  \n{ins['description']}")
+    st.subheader("💡 الگوهای شناسایی‌شده")
+    insights = api_get("/analytics/insights")
+    if insights and not show_api_error(insights) and isinstance(insights, list):
+        if not insights:
+            st.info("هنوز الگوی خاصی شناسایی نشده. چند هزینه بیشتر ثبت کن.")
+        for ins in insights:
+            icon = {"warning": "🟠", "success": "🟢", "info": "🔵"}.get(ins.get("severity", ""), "⚪")
+            st.markdown(f"{icon} **{ins.get('title', '')}**  \n{ins.get('description', '')}")
+            st.markdown("")
 
 # ─────────────────────────────────────────────
-# CATEGORIES
+# دسته‌بندی‌ها
 # ─────────────────────────────────────────────
-elif page == "Categories":
-    st.title("🏷️ Categories")
+elif page == "🏷️ دسته‌بندی‌ها":
+    st.title("🏷️ دسته‌بندی‌ها")
 
-    if st.button("🌱 Seed Default Categories", type="primary"):
-        result = api_post("/categories/seed", {})
-        if result is not None:
-            st.success(f"Seeded {len(result)} categories!")
-            st.rerun()
+    col_btn, _ = st.columns([1, 2])
+    with col_btn:
+        if st.button("🌱 ساخت دسته‌های پیش‌فرض", type="primary", use_container_width=True):
+            result = api_post("/categories/seed", {})
+            if result and not result.get("__error__"):
+                st.success(f"{len(result)} دسته ساخته شد!")
+                st.rerun()
+            elif show_api_error(result):
+                pass
 
-    cats = api_get("/categories/") or []
+    st.markdown("")
+    cats = api_get("/categories/")
+    if show_api_error(cats):
+        st.stop()
+
+    cats = cats or []
     if cats:
         cols = st.columns(3)
         for i, c in enumerate(cats):
             with cols[i % 3]:
+                color = c.get("color", "#6366f1")
                 st.markdown(
                     f"""
-                    <div style="background:{c['color']}22; border-left:4px solid {c['color']};
-                    padding:12px; border-radius:8px; margin-bottom:10px;">
-                    <span style="font-size:1.4rem">{c['icon']}</span>
-                    <b>{c['name']}</b>
+                    <div style="
+                        background: {color}18;
+                        border-right: 4px solid {color};
+                        padding: 14px 16px;
+                        border-radius: 10px;
+                        margin-bottom: 12px;
+                        direction: rtl;
+                    ">
+                        <span style="font-size: 1.5rem;">{c.get('icon', '')}</span>
+                        <b style="margin-right: 8px; color: #e2e8f0;">{c['name']}</b>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
     else:
-        st.info("No categories yet. Click the seed button above.")
-
-# Footer
-st.sidebar.markdown("---")
-st.sidebar.caption("Built with ❤️ · FastAPI + Streamlit + scikit-learn")
+        st.info("هنوز دسته‌ای وجود ندارد. دکمه بالا را بزن تا دسته‌های پیش‌فرض ساخته شوند.")

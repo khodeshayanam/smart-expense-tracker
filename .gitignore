@@ -21,12 +21,10 @@ env/
 Thumbs.db
 
 # Streamlit
-.streamlit/secrets.toml
+.streamlit/
 
-# Distribution
+# Misc
+*.log
 dist/
 build/
 *.egg-info/
-
-# Logs
-*.log
