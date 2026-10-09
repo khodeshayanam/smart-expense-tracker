@@ -65,7 +65,7 @@ def log_habit(payload: HabitLogCreate, db: Session = Depends(get_db)):
 @router.get("/{habit_id}/streak")
 def get_streak(habit_id: int, db: Session = Depends(get_db)):
     habit = db.get(Habit, habit_id)
-    if not habit:
+    if not habit or not habit.is_active:
         raise HTTPException(404, "Habit not found")
     return habit_streak(db, habit_id)
 

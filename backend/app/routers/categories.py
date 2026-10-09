@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -24,10 +25,10 @@ DEFAULT_CATEGORIES = [
 
 @router.post("/seed", response_model=list[CategoryOut])
 def seed_categories(db: Session = Depends(get_db)):
-    existing = {c.name for c in db.query(Category).all()}
+    existing = {c.name.lower() for c in db.query(Category).all()}
     created = []
     for item in DEFAULT_CATEGORIES:
-        if item["name"] not in existing:
+        if item["name"].lower() not in existing:
             cat = Category(**item, is_system=True)
             db.add(cat)
             created.append(cat)
@@ -44,7 +45,12 @@ def list_categories(db: Session = Depends(get_db)):
 
 @router.post("/", response_model=CategoryOut, status_code=201)
 def create_category(payload: CategoryCreate, db: Session = Depends(get_db)):
-    if db.query(Category).filter(Category.name == payload.name).first():
+    exists = (
+        db.query(Category)
+        .filter(func.lower(Category.name) == payload.name.lower())
+        .first()
+    )
+    if exists:
         raise HTTPException(400, "Category already exists")
     cat = Category(**payload.model_dump())
     db.add(cat)
