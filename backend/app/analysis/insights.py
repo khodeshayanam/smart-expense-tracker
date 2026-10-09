@@ -78,14 +78,14 @@ def predict_next_month(db: Session) -> dict:
     # keep only fully completed months
     complete = [s for s in summary if s["month"] != current_month]
 
-    if len(complete) < 3:
+    if len(complete) < 6:
         # fallback: simple average of whatever we have
         if not complete:
             return {
                 "next_month_estimate": 0.0,
                 "confidence": "low",
                 "method": "insufficient_data",
-                "details": {"message": "Need at least 3 complete months of data"},
+                "details": {"message": "Need at least 6 complete months of data"},
             }
         avg = sum(s["total"] for s in complete) / len(complete)
         return {
@@ -93,7 +93,7 @@ def predict_next_month(db: Session) -> dict:
             "confidence": "low",
             "method": "simple_average",
             "details": {
-                "message": f"Only {len(complete)} complete month(s); using average",
+                "message": f"Only {len(complete)} complete month(s) (need 6+ for regression); using average",
                 "months_used": len(complete),
             },
         }
@@ -263,8 +263,8 @@ def habit_streak(db: Session, habit_id: int) -> dict:
 
     Rules:
     - Only completed logs count
-    - Current streak: consecutive days ending today or yesterday
-    - Gaps break the streak
+    - Current streak ends on today or yesterday (grace period)
+    - Any gap breaks the streak
     - longest_streak is always >= current_streak
     """
     logs = (
@@ -278,20 +278,15 @@ def habit_streak(db: Session, habit_id: int) -> dict:
 
     dates = sorted({log.date for log in logs})
     total_completed = len(dates)
+    dates_set = set(dates)
+    today = date.today()
 
     # --- current streak ---
-    today = date.today()
-    dates_set = set(dates)
-
-    # streak must end on today or yesterday (grace for not-yet-logged today)
     if today in dates_set:
         cursor = today
     elif (today - timedelta(days=1)) in dates_set:
         cursor = today - timedelta(days=1)
     else:
-        current = 0
-        # fall through to longest calculation
-        current = 0
         cursor = None
 
     current = 0
@@ -310,7 +305,6 @@ def habit_streak(db: Session, habit_id: int) -> dict:
         else:
             temp = 1
 
-    # invariant: longest >= current
     longest = max(longest, current)
 
     return {

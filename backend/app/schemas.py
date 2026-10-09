@@ -1,4 +1,5 @@
-from datetime import date, datetime
+from datetime import date as dt_date, datetime
+import datetime as dt
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import Optional, Literal
 import re
@@ -41,7 +42,7 @@ class CategoryOut(CategoryBase):
 class ExpenseBase(BaseModel):
     amount: float = Field(..., gt=0, le=1_000_000_000)
     description: str = Field(..., min_length=1, max_length=255)
-    date: date
+    date: dt_date
     category_id: int
     notes: Optional[str] = None
 
@@ -55,10 +56,9 @@ class ExpenseBase(BaseModel):
 
     @field_validator("date")
     @classmethod
-    def no_far_future(cls, v: date) -> date:
-        # allow up to 1 year in the future for planned expenses
+    def no_far_future(cls, v: dt_date) -> dt_date:
         from datetime import timedelta
-        if v > date.today() + timedelta(days=365):
+        if v > dt_date.today() + timedelta(days=365):
             raise ValueError("date cannot be more than 1 year in the future")
         return v
 
@@ -70,7 +70,7 @@ class ExpenseCreate(ExpenseBase):
 class ExpenseUpdate(BaseModel):
     amount: Optional[float] = Field(None, gt=0, le=1_000_000_000)
     description: Optional[str] = Field(None, min_length=1, max_length=255)
-    date: Optional[date] = None
+    date: Optional[dt_date] = None
     category_id: Optional[int] = None
     notes: Optional[str] = None
 
@@ -82,6 +82,16 @@ class ExpenseUpdate(BaseModel):
         v = v.strip()
         if not v:
             raise ValueError("description cannot be empty or whitespace only")
+        return v
+
+    @field_validator("date")
+    @classmethod
+    def no_far_future_update(cls, v: Optional[dt_date]) -> Optional[dt_date]:
+        if v is None:
+            return v
+        from datetime import timedelta
+        if v > dt_date.today() + timedelta(days=365):
+            raise ValueError("date cannot be more than 1 year in the future")
         return v
 
 
@@ -123,14 +133,14 @@ class HabitOut(HabitBase):
 
 class HabitLogCreate(BaseModel):
     habit_id: int
-    date: date
+    date: dt_date
     completed: bool = True
     notes: Optional[str] = None
 
     @field_validator("date")
     @classmethod
-    def no_future_log(cls, v: date) -> date:
-        if v > date.today():
+    def no_future_log(cls, v: dt_date) -> dt_date:
+        if v > dt_date.today():
             raise ValueError("cannot log habit for a future date")
         return v
 

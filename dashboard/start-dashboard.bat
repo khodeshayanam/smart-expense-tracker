@@ -5,13 +5,13 @@ cd /d "%~dp0"
 
 echo.
 echo ========================================
-echo   در حال اجرای داشبورد ...
+echo   Starting Dashboard ...
 echo ========================================
 echo.
-echo آدرس داشبورد: http://localhost:8501
+echo Address: http://127.0.0.1:8501
 echo.
-echo برای توقف، Ctrl+C را بزنید.
+echo Press Ctrl+C to stop.
 echo.
 
-streamlit run app.py
+streamlit run app.py --server.address 127.0.0.1 --server.port 8501
 pause

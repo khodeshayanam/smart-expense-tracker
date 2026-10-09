@@ -30,7 +30,7 @@ def list_habits(active_only: bool = True, db: Session = Depends(get_db)):
 @router.get("/{habit_id}", response_model=HabitOut)
 def get_habit(habit_id: int, db: Session = Depends(get_db)):
     habit = db.get(Habit, habit_id)
-    if not habit:
+    if not habit or not habit.is_active:
         raise HTTPException(404, "Habit not found")
     return habit
 
