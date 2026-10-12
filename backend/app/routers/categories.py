@@ -1,10 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Category
-from ..schemas import CategoryCreate, CategoryOut
+from ..schemas import CategoryCreate, CategoryOut, name_key
 
 router = APIRouter(prefix="/categories", tags=["Categories"])
 
@@ -25,13 +24,14 @@ DEFAULT_CATEGORIES = [
 
 @router.post("/seed", response_model=list[CategoryOut])
 def seed_categories(db: Session = Depends(get_db)):
-    existing = {c.name.lower() for c in db.query(Category).all()}
+    existing = {name_key(c.name) for c in db.query(Category).all()}
     created = []
     for item in DEFAULT_CATEGORIES:
-        if item["name"].lower() not in existing:
+        if name_key(item["name"]) not in existing:
             cat = Category(**item, is_system=True)
             db.add(cat)
             created.append(cat)
+            existing.add(name_key(item["name"]))
     db.commit()
     for c in created:
         db.refresh(c)
@@ -45,13 +45,10 @@ def list_categories(db: Session = Depends(get_db)):
 
 @router.post("/", response_model=CategoryOut, status_code=201)
 def create_category(payload: CategoryCreate, db: Session = Depends(get_db)):
-    exists = (
-        db.query(Category)
-        .filter(func.lower(Category.name) == payload.name.lower())
-        .first()
-    )
-    if exists:
-        raise HTTPException(400, "Category already exists")
+    key = name_key(payload.name)
+    for c in db.query(Category).all():
+        if name_key(c.name) == key:
+            raise HTTPException(400, "Category already exists")
     cat = Category(**payload.model_dump())
     db.add(cat)
     db.commit()

@@ -1,8 +1,22 @@
-from datetime import date as dt_date, datetime
-import datetime as dt
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from datetime import date as dt_date, datetime, timedelta
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 from typing import Optional, Literal
 import re
+import unicodedata
+
+
+def normalize_name(v: str) -> str:
+    """Strip, collapse spaces, NFC normalize, fold case for comparison helpers."""
+    v = unicodedata.normalize("NFC", v.strip())
+    v = re.sub(r"\s+", " ", v)
+    if not v:
+        raise ValueError("name cannot be empty or whitespace only")
+    return v
+
+
+def name_key(v: str) -> str:
+    """Case-folded key for uniqueness checks (handles most Unicode)."""
+    return unicodedata.normalize("NFC", v).casefold()
 
 
 # ──────────── Category ────────────
@@ -13,11 +27,8 @@ class CategoryBase(BaseModel):
 
     @field_validator("name")
     @classmethod
-    def strip_name(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            raise ValueError("name cannot be empty or whitespace only")
-        return v
+    def clean_name(cls, v: str) -> str:
+        return normalize_name(v)
 
     @field_validator("color")
     @classmethod
@@ -45,6 +56,7 @@ class ExpenseBase(BaseModel):
     date: dt_date
     category_id: int
     notes: Optional[str] = None
+    tx_type: Literal["expense", "income"] = "expense"
 
     @field_validator("description")
     @classmethod
@@ -57,7 +69,6 @@ class ExpenseBase(BaseModel):
     @field_validator("date")
     @classmethod
     def no_far_future(cls, v: dt_date) -> dt_date:
-        from datetime import timedelta
         if v > dt_date.today() + timedelta(days=365):
             raise ValueError("date cannot be more than 1 year in the future")
         return v
@@ -73,6 +84,7 @@ class ExpenseUpdate(BaseModel):
     date: Optional[dt_date] = None
     category_id: Optional[int] = None
     notes: Optional[str] = None
+    tx_type: Optional[Literal["expense", "income"]] = None
 
     @field_validator("description")
     @classmethod
@@ -89,7 +101,6 @@ class ExpenseUpdate(BaseModel):
     def no_far_future_update(cls, v: Optional[dt_date]) -> Optional[dt_date]:
         if v is None:
             return v
-        from datetime import timedelta
         if v > dt_date.today() + timedelta(days=365):
             raise ValueError("date cannot be more than 1 year in the future")
         return v
@@ -112,11 +123,8 @@ class HabitBase(BaseModel):
 
     @field_validator("name")
     @classmethod
-    def strip_name(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            raise ValueError("name cannot be empty or whitespace only")
-        return v
+    def clean_name(cls, v: str) -> str:
+        return normalize_name(v)
 
 
 class HabitCreate(HabitBase):
@@ -152,7 +160,7 @@ class HabitLogOut(HabitLogCreate):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ──────────── Analytics responses ────────────
+# ──────────── Analytics ────────────
 class MonthlySummary(BaseModel):
     month: str
     total: float
@@ -171,4 +179,4 @@ class PatternInsight(BaseModel):
     type: str
     title: str
     description: str
-    severity: str  # info / warning / success
+    severity: str

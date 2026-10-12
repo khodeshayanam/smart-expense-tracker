@@ -165,7 +165,7 @@ page = st.sidebar.radio(
 )
 
 st.sidebar.markdown("---")
-st.sidebar.caption("نسخه ۱.۱ · FastAPI + Streamlit")
+st.sidebar.caption("نسخه ۱.۴ · FastAPI + Streamlit")
 
 # ─────────────────────────────────────────────
 # صفحه داشبورد
@@ -272,39 +272,48 @@ elif page == "➕ ثبت هزینه":
         st.warning("هنوز دسته‌بندی وجود ندارد. اول به صفحه «دسته‌بندی‌ها» برو و دکمه‌ی ساخت دسته‌های پیش‌فرض را بزن.")
         st.stop()
 
-    with st.form("expense_form", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            amount = st.number_input("مبلغ (تومان)", min_value=1.0, step=1000.0, format="%.0f")
-        with col2:
-            exp_date = st.date_input("تاریخ", value=date.today())
+    # AI suggestion OUTSIDE form so it updates as user types
+    description = st.text_input("توضیح", placeholder="مثال: ناهار رستوران", key="exp_desc")
+    if description and len(description) > 2:
+        suggestion = api_get("/expenses/suggest-category", params={"description": description})
+        if suggestion and not suggestion.get("__error__") and suggestion.get("suggested_category"):
+            st.info(f"🤖 پیشنهاد هوشمند دسته: **{suggestion['suggested_category']}**")
 
-        description = st.text_input("توضیح", placeholder="مثال: ناهار رستوران")
-        category = st.selectbox("دسته‌بندی", options=list(cat_options.keys()))
-        notes = st.text_area("یادداشت (اختیاری)", height=80)
+    col1, col2 = st.columns(2)
+    with col1:
+        amount = st.number_input("مبلغ (تومان)", min_value=1.0, step=1000.0, format="%.0f", key="exp_amount")
+    with col2:
+        exp_date = st.date_input("تاریخ", value=date.today(), key="exp_date")
 
-        # پیشنهاد هوشمند
-        if description and len(description) > 2:
-            suggestion = api_get("/expenses/suggest-category", params={"description": description})
-            if suggestion and not suggestion.get("__error__") and suggestion.get("suggested_category"):
-                st.caption(f"🤖 پیشنهاد هوشمند: **{suggestion['suggested_category']}**")
+    category = st.selectbox("دسته‌بندی", options=list(cat_options.keys()), key="exp_cat")
+    tx_type = st.selectbox(
+        "نوع تراکنش",
+        options=["expense", "income"],
+        format_func=lambda x: "هزینه" if x == "expense" else "درآمد",
+        key="exp_type",
+    )
+    notes = st.text_area("یادداشت (اختیاری)", height=80, key="exp_notes")
 
-        submitted = st.form_submit_button("💾 ذخیره هزینه", type="primary", use_container_width=True)
-
-        if submitted:
+    if st.button("💾 ذخیره", type="primary", use_container_width=True):
+        if not description or not description.strip():
+            st.error("توضیح را وارد کنید.")
+        else:
             payload = {
                 "amount": amount,
-                "description": description,
+                "description": description.strip(),
                 "date": exp_date.isoformat(),
                 "category_id": cat_options[category],
                 "notes": notes or None,
+                "tx_type": tx_type,
             }
             result = api_post("/expenses/", payload)
-            if show_api_error(result):
-                pass
+            if isinstance(result, dict) and result.get("__error__"):
+                show_api_error(result)
             elif result:
-                st.success("✅ هزینه با موفقیت ذخیره شد!")
+                st.success("✅ با موفقیت ذخیره شد!")
                 st.balloons()
+            else:
+                st.error("خطا در ذخیره. ورودی‌ها را بررسی کنید.")
 
 # ─────────────────────────────────────────────
 # عادت‌ها

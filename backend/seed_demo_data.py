@@ -1,6 +1,6 @@
 """
 Seed realistic demo data so the dashboard looks impressive immediately.
-Run: python -m seed_demo_data  (from backend folder)
+Run from backend folder:  python seed_demo_data.py
 """
 import random
 from datetime import date, timedelta
@@ -9,7 +9,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from app.database import SessionLocal, init_db
+from app.database import SessionLocal, init_db, engine, Base
 from app.models import Category, Expense, Habit, HabitLog
 from app.routers.categories import DEFAULT_CATEGORIES
 
@@ -47,9 +47,17 @@ DESCRIPTIONS = {
 }
 
 
-def seed():
+def seed(reset: bool = False):
     init_db()
     db = SessionLocal()
+
+    if reset:
+        print("Resetting all data...")
+        db.query(HabitLog).delete()
+        db.query(Habit).delete()
+        db.query(Expense).delete()
+        db.query(Category).delete()
+        db.commit()
 
     # Categories
     existing = {c.name: c for c in db.query(Category).all()}
@@ -61,30 +69,37 @@ def seed():
             existing[item["name"]] = cat
     db.commit()
 
-    # Clear old demo expenses (optional)
     if db.query(Expense).count() < 30:
-        print("Seeding expenses...")
+        print("Seeding expenses + income...")
         today = date.today()
-        for i in range(90):  # ~3 months
+        for i in range(90):
             d = today - timedelta(days=i)
-            # 1-4 expenses per day
             for _ in range(random.randint(0, 3)):
                 cat_name = random.choice(list(DESCRIPTIONS.keys()))
                 cat = existing[cat_name]
                 desc = random.choice(DESCRIPTIONS[cat_name])
                 amount = round(random.uniform(50, 850) * random.choice([1, 1, 1, 2, 3]), 0)
-                exp = Expense(
+                db.add(Expense(
                     amount=amount,
                     description=desc,
                     date=d,
                     category_id=cat.id,
                     notes=None,
-                )
-                db.add(exp)
+                    tx_type="expense",
+                ))
+            # monthly salary on the 1st
+            if d.day == 1 and "Salary / Income" in existing:
+                db.add(Expense(
+                    amount=15000,
+                    description="Monthly salary",
+                    date=d,
+                    category_id=existing["Salary / Income"].id,
+                    notes=None,
+                    tx_type="income",
+                ))
         db.commit()
-        print(f"Created {db.query(Expense).count()} expenses")
+        print(f"Created {db.query(Expense).count()} transactions")
 
-    # Habits
     if db.query(Habit).count() == 0:
         print("Seeding habits...")
         habits_data = [
@@ -97,18 +112,17 @@ def seed():
             habit = Habit(**h, target_frequency="daily")
             db.add(habit)
             db.flush()
-            # log some history
             for i in range(25):
                 d = date.today() - timedelta(days=i)
-                if random.random() > 0.25:  # 75% completion
-                    log = HabitLog(habit_id=habit.id, date=d, completed=True)
-                    db.add(log)
+                if random.random() > 0.25:
+                    db.add(HabitLog(habit_id=habit.id, date=d, completed=True))
         db.commit()
         print("Habits created with streaks")
 
     db.close()
-    print("✅ Demo data ready!")
+    print("Demo data ready!")
 
 
 if __name__ == "__main__":
-    seed()
+    reset = "--reset" in sys.argv
+    seed(reset=reset)

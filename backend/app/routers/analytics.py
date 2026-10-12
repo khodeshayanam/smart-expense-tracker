@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -13,7 +13,10 @@ router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
 
 @router.get("/summary")
-def get_summary(months: int = 12, db: Session = Depends(get_db)):
+def get_summary(
+    months: int = Query(12, ge=1, le=120),
+    db: Session = Depends(get_db),
+):
     return monthly_summary(db, months=months)
 
 

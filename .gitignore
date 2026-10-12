@@ -8,7 +8,15 @@ venv/
 env/
 .env
 *.db
+*.db-journal
 *.sqlite3
+
+# Testing / tooling
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
 
 # IDE
 .idea/

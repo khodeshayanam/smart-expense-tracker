@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Optional
+from typing import Optional, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
@@ -11,24 +11,30 @@ from ..analysis.insights import suggest_category
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
 
 
+def _reload(db: Session, expense_id: int) -> Expense:
+    return (
+        db.query(Expense)
+        .options(joinedload(Expense.category))
+        .filter(Expense.id == expense_id)
+        .first()
+    )
+
+
 @router.post("/", response_model=ExpenseOut, status_code=201)
 def create_expense(payload: ExpenseCreate, db: Session = Depends(get_db)):
     cat = db.get(Category, payload.category_id)
     if not cat:
         raise HTTPException(400, "Invalid category_id")
 
-    expense = Expense(**payload.model_dump())
+    # auto-mark salary category as income if client forgot
+    data = payload.model_dump()
+    if cat.name.strip().lower() in {"salary / income", "salary", "income"}:
+        data["tx_type"] = "income"
+
+    expense = Expense(**data)
     db.add(expense)
     db.commit()
-    db.refresh(expense)
-    # reload with category for response
-    expense = (
-        db.query(Expense)
-        .options(joinedload(Expense.category))
-        .filter(Expense.id == expense.id)
-        .first()
-    )
-    return expense
+    return _reload(db, expense.id)
 
 
 @router.get("/", response_model=list[ExpenseOut])
@@ -38,8 +44,12 @@ def list_expenses(
     category_id: Optional[int] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
+    tx_type: Optional[Literal["expense", "income"]] = None,
     db: Session = Depends(get_db),
 ):
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(422, "start_date cannot be after end_date")
+
     q = db.query(Expense).options(joinedload(Expense.category))
     if category_id:
         q = q.filter(Expense.category_id == category_id)
@@ -47,10 +57,11 @@ def list_expenses(
         q = q.filter(Expense.date >= start_date)
     if end_date:
         q = q.filter(Expense.date <= end_date)
+    if tx_type:
+        q = q.filter(Expense.tx_type == tx_type)
     return q.order_by(Expense.date.desc(), Expense.id.desc()).offset(skip).limit(limit).all()
 
 
-# IMPORTANT: static path must come BEFORE /{expense_id} to avoid route collision
 @router.get("/suggest-category")
 def auto_suggest_category(
     description: str = Query(..., min_length=2),
@@ -62,12 +73,7 @@ def auto_suggest_category(
 
 @router.get("/{expense_id}", response_model=ExpenseOut)
 def get_expense(expense_id: int, db: Session = Depends(get_db)):
-    expense = (
-        db.query(Expense)
-        .options(joinedload(Expense.category))
-        .filter(Expense.id == expense_id)
-        .first()
-    )
+    expense = _reload(db, expense_id)
     if not expense:
         raise HTTPException(404, "Expense not found")
     return expense
@@ -81,18 +87,11 @@ def update_expense(expense_id: int, payload: ExpenseUpdate, db: Session = Depend
 
     data = payload.model_dump(exclude_unset=True)
 
-    # Reject explicit nulls for non-nullable fields
-    if "amount" in data and data["amount"] is None:
-        raise HTTPException(422, "amount cannot be null")
-    if "description" in data and data["description"] is None:
-        raise HTTPException(422, "description cannot be null")
-    if "date" in data and data["date"] is None:
-        raise HTTPException(422, "date cannot be null")
+    for field in ("amount", "description", "date", "category_id"):
+        if field in data and data[field] is None:
+            raise HTTPException(422, f"{field} cannot be null")
 
-    # Validate category if provided
     if "category_id" in data:
-        if data["category_id"] is None:
-            raise HTTPException(422, "category_id cannot be null")
         cat = db.get(Category, data["category_id"])
         if not cat:
             raise HTTPException(400, "Invalid category_id")
@@ -101,14 +100,7 @@ def update_expense(expense_id: int, payload: ExpenseUpdate, db: Session = Depend
         setattr(expense, k, v)
 
     db.commit()
-    db.refresh(expense)
-    expense = (
-        db.query(Expense)
-        .options(joinedload(Expense.category))
-        .filter(Expense.id == expense.id)
-        .first()
-    )
-    return expense
+    return _reload(db, expense.id)
 
 
 @router.delete("/{expense_id}", status_code=204)

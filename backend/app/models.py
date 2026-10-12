@@ -25,7 +25,11 @@ class Expense(Base):
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    # "expense" | "income" — income is excluded from spending stats
+    tx_type: Mapped[str] = mapped_column(String(20), default="expense", index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
 
     category: Mapped["Category"] = relationship(back_populates="expenses")
 
@@ -36,12 +40,16 @@ class Habit(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    target_frequency: Mapped[str] = mapped_column(String(20), default="daily")  # daily / weekly
+    target_frequency: Mapped[str] = mapped_column(String(20), default="daily")
     icon: Mapped[str] = mapped_column(String(20), default="✅")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
 
-    logs: Mapped[list["HabitLog"]] = relationship(back_populates="habit", cascade="all, delete-orphan")
+    logs: Mapped[list["HabitLog"]] = relationship(
+        back_populates="habit", cascade="all, delete-orphan"
+    )
 
 
 class HabitLog(Base):
@@ -52,6 +60,8 @@ class HabitLog(Base):
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     completed: Mapped[bool] = mapped_column(Boolean, default=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
 
     habit: Mapped["Habit"] = relationship(back_populates="logs")

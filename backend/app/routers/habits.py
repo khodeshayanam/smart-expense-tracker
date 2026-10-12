@@ -12,6 +12,13 @@ router = APIRouter(prefix="/habits", tags=["Habits"])
 
 @router.post("/", response_model=HabitOut, status_code=201)
 def create_habit(payload: HabitCreate, db: Session = Depends(get_db)):
+    dup = (
+        db.query(Habit)
+        .filter(Habit.is_active == True, Habit.name == payload.name)
+        .first()
+    )
+    if dup:
+        raise HTTPException(400, "An active habit with this name already exists")
     habit = Habit(**payload.model_dump())
     db.add(habit)
     db.commit()
@@ -49,8 +56,10 @@ def log_habit(payload: HabitLogCreate, db: Session = Depends(get_db)):
         .first()
     )
     if existing:
-        existing.completed = payload.completed
-        existing.notes = payload.notes
+        data = payload.model_dump(exclude_unset=True)
+        existing.completed = data.get("completed", existing.completed)
+        if "notes" in data:
+            existing.notes = data["notes"]
         db.commit()
         db.refresh(existing)
         return existing
