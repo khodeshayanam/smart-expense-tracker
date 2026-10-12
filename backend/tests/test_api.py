@@ -82,8 +82,8 @@ def test_suggest_route_not_shadowed_by_id_route(client):
 
 
 def test_duplicate_category_rejected_case_insensitive(client):
-    assert client.post("/api/categories/", json={"name": "Food & Drink"}).status_code == 400
-    assert client.post("/api/categories/", json={"name": "food & drink"}).status_code == 400
+    assert client.post("/api/categories/", json={"name": "خوراک و نوشیدنی"}).status_code == 400
+    assert client.post("/api/categories/", json={"name": "  خوراک و نوشیدنی  "}).status_code == 400
 
 
 def test_streak_gap_breaks_streak(client):
@@ -106,8 +106,8 @@ def test_inactive_habit_is_hidden(client):
 def test_income_excluded_from_total_spent(client):
     # category 1 is Food; find Salary category
     cats = client.get("/api/categories/").json()
-    salary = next(c for c in cats if "Salary" in c["name"] or "Income" in c["name"])
-    food = next(c for c in cats if "Food" in c["name"])
+    salary = next(c for c in cats if "حقوق" in c["name"] or "درآمد" in c["name"] or "Salary" in c["name"])
+    food = next(c for c in cats if "خوراک" in c["name"] or "Food" in c["name"])
     _expense(client, amount=100, category_id=food["id"], tx_type="expense")
     _expense(client, amount=5000, category_id=salary["id"], tx_type="income", description="pay")
     ov = client.get("/api/analytics/overview").json()

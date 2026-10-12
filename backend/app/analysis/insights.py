@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from ..models import Expense, Category, HabitLog
 
 # Categories treated as income when tx_type is missing (legacy rows)
-INCOME_CATEGORY_NAMES = {"salary / income", "salary", "income"}
+INCOME_CATEGORY_NAMES = {"salary / income", "salary", "income", "حقوق و درآمد", "حقوق", "درآمد"}
 
 
 def expenses_to_df(db: Session, expenses_only: bool = True) -> pd.DataFrame:

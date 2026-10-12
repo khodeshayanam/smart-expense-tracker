@@ -1,32 +1,31 @@
 """
-Smart Expense Tracker — UI inspired by X (dark, minimal, modern)
+داشبورد مدیریت هزینه — ظاهر تیره مدرن + تقویم شمسی
 """
 import streamlit as st
 import requests
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
-from datetime import date
+from datetime import date as greg_date
 import html as html_module
+import jdatetime
 
 st.set_page_config(
-    page_title="Expense",
+    page_title="مدیریت هزینه",
     page_icon="◈",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 # ─────────────────────────────────────────────
-# X-inspired design system
+# استایل
 # ─────────────────────────────────────────────
 st.markdown(
     """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&display=swap');
 
 :root {
     --bg: #000000;
-    --bg-elevated: #0a0a0a;
     --bg-card: #16181c;
     --border: #2f3336;
     --border-hover: #3e444a;
@@ -40,234 +39,108 @@ st.markdown(
 }
 
 html, body, [class*="css"], .stApp {
-    direction: rtl;
-    text-align: right;
-    font-family: 'Inter', Tahoma, "Segoe UI", sans-serif !important;
+    direction: rtl !important;
+    text-align: right !important;
+    font-family: 'Vazirmatn', Tahoma, sans-serif !important;
     background-color: var(--bg) !important;
     color: var(--text) !important;
 }
-
-.stApp {
-    background: var(--bg) !important;
-}
-
-/* Hide Streamlit chrome */
+.stApp { background: var(--bg) !important; }
 #MainMenu, footer, header { visibility: hidden; height: 0; }
-div[data-testid="stToolbar"] { display: none; }
-.stDeployButton { display: none; }
+div[data-testid="stToolbar"], .stDeployButton { display: none; }
 
-/* Sidebar — X left rail feel */
 section[data-testid="stSidebar"] {
     background-color: var(--bg) !important;
     border-left: 1px solid var(--border) !important;
-    border-right: none !important;
 }
-section[data-testid="stSidebar"] > div {
-    background-color: var(--bg) !important;
-    padding-top: 1.5rem !important;
-}
-
-/* Main content width like X */
 .block-container {
     padding-top: 1.5rem !important;
-    padding-bottom: 3rem !important;
     max-width: 1100px !important;
 }
 
-/* Typography */
 h1, h2, h3, h4 {
     color: var(--text) !important;
     font-weight: 700 !important;
-    letter-spacing: -0.02em !important;
 }
-h1 { font-size: 1.75rem !important; margin-bottom: 0.25rem !important; }
-h2 { font-size: 1.35rem !important; }
-h3 { font-size: 1.15rem !important; }
+p, span, label, .stMarkdown { color: var(--text) !important; }
 
-p, span, label, .stMarkdown {
-    color: var(--text) !important;
-}
-
-/* Metric cards — X card style */
 div[data-testid="stMetric"] {
     background: var(--bg-card) !important;
     border: 1px solid var(--border) !important;
     border-radius: 16px !important;
     padding: 18px 20px !important;
-    transition: border-color 0.15s ease;
 }
-div[data-testid="stMetric"]:hover {
-    border-color: var(--border-hover) !important;
-}
-div[data-testid="stMetric"] label {
-    color: var(--text-muted) !important;
-    font-size: 0.85rem !important;
-    font-weight: 500 !important;
-}
+div[data-testid="stMetric"] label { color: var(--text-muted) !important; font-size: 0.85rem !important; }
 div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
-    color: var(--text) !important;
-    font-size: 1.55rem !important;
-    font-weight: 700 !important;
+    color: var(--text) !important; font-size: 1.45rem !important; font-weight: 700 !important;
 }
 
-/* Buttons — X pill / primary */
 .stButton > button {
     border-radius: 9999px !important;
     font-weight: 700 !important;
-    font-size: 0.95rem !important;
-    padding: 0.55rem 1.4rem !important;
     border: 1px solid var(--border) !important;
     background: transparent !important;
     color: var(--text) !important;
-    transition: background 0.15s ease, border-color 0.15s ease !important;
 }
-.stButton > button:hover {
-    background: rgba(239, 243, 244, 0.1) !important;
-    border-color: var(--border-hover) !important;
-}
+.stButton > button:hover { background: rgba(239,243,244,0.1) !important; }
 .stButton > button[kind="primary"],
 .stButton > button[data-testid="baseButton-primary"] {
     background: var(--accent) !important;
     border-color: var(--accent) !important;
     color: #fff !important;
 }
-.stButton > button[kind="primary"]:hover,
-.stButton > button[data-testid="baseButton-primary"]:hover {
-    background: var(--accent-hover) !important;
-    border-color: var(--accent-hover) !important;
-}
 
-/* Inputs */
 .stTextInput > div > div > input,
 .stNumberInput > div > div > input,
 .stTextArea > div > div > textarea,
-.stSelectbox > div > div,
-.stDateInput > div > div > input {
+.stSelectbox > div > div {
     background-color: var(--bg) !important;
     border: 1px solid var(--border) !important;
     border-radius: 12px !important;
     color: var(--text) !important;
-    font-size: 0.95rem !important;
-}
-.stTextInput > div > div > input:focus,
-.stNumberInput > div > div > input:focus,
-.stTextArea > div > div > textarea:focus {
-    border-color: var(--accent) !important;
-    box-shadow: 0 0 0 1px var(--accent) !important;
 }
 
-/* Radio / nav */
 div[role="radiogroup"] label {
-    background: transparent !important;
     border-radius: 9999px !important;
     padding: 10px 16px !important;
-    margin-bottom: 4px !important;
     font-weight: 600 !important;
-    color: var(--text) !important;
-    transition: background 0.12s ease !important;
 }
-div[role="radiogroup"] label:hover {
-    background: rgba(231, 233, 234, 0.1) !important;
-}
+div[role="radiogroup"] label:hover { background: rgba(231,233,234,0.1) !important; }
 
-/* Alerts */
 .stSuccess, .stError, .stInfo, .stWarning {
-    direction: rtl;
-    text-align: right;
-    border-radius: 12px !important;
-    border: 1px solid var(--border) !important;
+    direction: rtl; text-align: right; border-radius: 12px !important;
 }
+.stDataFrame { direction: rtl; border-radius: 16px !important; }
 
-/* Dataframe */
-.stDataFrame {
-    direction: rtl;
-    border: 1px solid var(--border) !important;
-    border-radius: 16px !important;
-    overflow: hidden;
-}
-
-/* Tabs */
-button[data-baseweb="tab"] {
-    color: var(--text-muted) !important;
-    font-weight: 600 !important;
-}
-button[data-baseweb="tab"][aria-selected="true"] {
-    color: var(--text) !important;
-    border-bottom-color: var(--accent) !important;
-}
-
-/* Expander */
-.streamlit-expanderHeader {
-    background: var(--bg-card) !important;
-    border-radius: 12px !important;
-    color: var(--text) !important;
-}
-
-/* Custom utility classes */
 .x-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-bottom: 12px;
-    margin-bottom: 20px;
+    padding-bottom: 12px; margin-bottom: 18px;
     border-bottom: 1px solid var(--border);
 }
-.x-title {
-    font-size: 1.35rem;
-    font-weight: 800;
-    color: var(--text);
-    letter-spacing: -0.03em;
-}
-.x-subtitle {
-    color: var(--text-muted);
-    font-size: 0.9rem;
-    margin-top: 2px;
-}
+.x-title { font-size: 1.35rem; font-weight: 800; color: var(--text); }
+.x-subtitle { color: var(--text-muted); font-size: 0.9rem; margin-top: 2px; }
 .x-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 16px 18px;
-    margin-bottom: 12px;
-    transition: border-color 0.15s ease;
-}
-.x-card:hover {
-    border-color: var(--border-hover);
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 16px 18px; margin-bottom: 12px;
 }
 .x-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(29, 155, 240, 0.12);
-    color: var(--accent);
-    border-radius: 9999px;
-    padding: 4px 12px;
-    font-size: 0.8rem;
-    font-weight: 600;
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(29,155,240,0.12); color: var(--accent);
+    border-radius: 9999px; padding: 4px 12px; font-size: 0.8rem; font-weight: 600;
 }
 .x-muted { color: var(--text-muted); font-size: 0.88rem; }
-.x-logo {
-    font-size: 1.6rem;
-    font-weight: 800;
-    color: var(--text);
-    letter-spacing: -0.04em;
-    margin-bottom: 1.2rem;
-}
+.x-logo { font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem; }
 .x-logo span { color: var(--accent); }
 .insight-row {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 14px 16px;
-    margin-bottom: 10px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 14px 16px; margin-bottom: 10px;
 }
-.insight-row strong { color: var(--text); }
 .cat-tile {
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 14px 16px;
-    margin-bottom: 10px;
-    background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 16px;
+    padding: 14px 16px; margin-bottom: 10px; background: var(--bg-card);
+}
+.info-box {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 16px; margin-bottom: 16px; line-height: 1.8;
 }
 </style>
 """,
@@ -275,16 +148,88 @@ button[data-baseweb="tab"][aria-selected="true"] {
 )
 
 # ─────────────────────────────────────────────
-# API helpers
+# تقویم شمسی
+# ─────────────────────────────────────────────
+PERSIAN_MONTHS = [
+    "فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور",
+    "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند",
+]
+
+
+def jalali_date_picker(label: str, key: str, default: jdatetime.date | None = None) -> greg_date:
+    """انتخاب تاریخ شمسی → برگرداندن تاریخ میلادی برای API"""
+    today_j = jdatetime.date.today()
+    default = default or today_j
+
+    st.markdown(f"**{label}**")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        year = st.selectbox(
+            "سال",
+            options=list(range(today_j.year - 5, today_j.year + 2)),
+            index=list(range(today_j.year - 5, today_j.year + 2)).index(default.year)
+            if default.year in range(today_j.year - 5, today_j.year + 2)
+            else 5,
+            key=f"{key}_y",
+            label_visibility="collapsed",
+        )
+    with c2:
+        month = st.selectbox(
+            "ماه",
+            options=list(range(1, 13)),
+            format_func=lambda m: PERSIAN_MONTHS[m - 1],
+            index=default.month - 1,
+            key=f"{key}_m",
+            label_visibility="collapsed",
+        )
+    with c3:
+        # تعداد روز ماه شمسی
+        try:
+            max_day = jdatetime.date(year, month, 1).j_month_days(year, month) if hasattr(jdatetime.date, "j_month_days") else 31
+        except Exception:
+            max_day = 31
+        # jdatetime: month days
+        if month <= 6:
+            max_day = 31
+        elif month <= 11:
+            max_day = 30
+        else:
+            # اسفند
+            max_day = 30 if jdatetime.date(year, 1, 1).isleap() else 29
+
+        day_default = min(default.day, max_day)
+        day = st.selectbox(
+            "روز",
+            options=list(range(1, max_day + 1)),
+            index=day_default - 1,
+            key=f"{key}_d",
+            label_visibility="collapsed",
+        )
+
+    j = jdatetime.date(year, month, day)
+    return j.togregorian()
+
+
+def to_jalali_str(g_date_str: str) -> str:
+    """رشته تاریخ میلادی YYYY-MM-DD → نمایش شمسی"""
+    try:
+        y, m, d = map(int, str(g_date_str)[:10].split("-"))
+        j = jdatetime.date.fromgregorian(date=greg_date(y, m, d))
+        return f"{j.year}/{j.month:02d}/{j.day:02d}"
+    except Exception:
+        return str(g_date_str)
+
+
+# ─────────────────────────────────────────────
+# ارتباط با API
 # ─────────────────────────────────────────────
 with st.sidebar:
-    st.markdown('<div class="x-logo">◈ <span>Expense</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="x-logo">◈ <span>هزینه</span></div>', unsafe_allow_html=True)
 
 API_URL = st.sidebar.text_input(
-    "API",
+    "آدرس سرور",
     value="http://127.0.0.1:8000/api",
-    label_visibility="collapsed",
-    help="آدرس Backend",
+    help="اگر سرور روی پورت دیگری است تغییر دهید",
 )
 
 
@@ -315,8 +260,9 @@ def show_api_error(result):
         return True
     if isinstance(result, dict) and result.get("__error__") == "connection":
         st.error(
-            "سرور خاموش است. ابتدا `start-backend.bat` را اجرا کنید "
-            "یا:\n`uvicorn app.main:app --reload --host 127.0.0.1 --port 8000`"
+            "سرور خاموش است. ابتدا فایل start-backend.bat را اجرا کنید "
+            "یا دستور زیر را بزنید:\n"
+            "uvicorn app.main:app --reload --host 127.0.0.1 --port 8000"
         )
         return True
     if isinstance(result, dict) and result.get("__error__"):
@@ -333,42 +279,41 @@ def x_header(title: str, subtitle: str = ""):
     )
 
 
-def plotly_x_layout(fig, height=360):
+def plotly_layout(fig, height=340):
     fig.update_layout(
         height=height,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="Inter, Tahoma", color="#e7e9ea", size=12),
+        font=dict(family="Vazirmatn, Tahoma", color="#e7e9ea", size=12),
         title_font=dict(size=15, color="#e7e9ea"),
         margin=dict(l=10, r=10, t=40, b=10),
-        xaxis=dict(gridcolor="#2f3336", zerolinecolor="#2f3336", color="#71767b"),
-        yaxis=dict(gridcolor="#2f3336", zerolinecolor="#2f3336", color="#71767b"),
-        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#e7e9ea")),
+        xaxis=dict(gridcolor="#2f3336", color="#71767b"),
+        yaxis=dict(gridcolor="#2f3336", color="#71767b"),
+        legend=dict(bgcolor="rgba(0,0,0,0)"),
         coloraxis_showscale=False,
     )
     return fig
 
 
 # ─────────────────────────────────────────────
-# Navigation
+# منو
 # ─────────────────────────────────────────────
 page = st.sidebar.radio(
-    "nav",
+    "منو",
     ["خانه", "ثبت تراکنش", "عادت‌ها", "تحلیل", "دسته‌ها"],
     label_visibility="collapsed",
 )
-
 st.sidebar.markdown("---")
 st.sidebar.markdown(
-    '<p class="x-muted" style="padding: 0 8px;">v1.5 · FastAPI + Streamlit</p>',
+    '<p class="x-muted" style="padding:0 8px">نسخه ۱.۶</p>',
     unsafe_allow_html=True,
 )
 
 # ─────────────────────────────────────────────
-# HOME
+# خانه
 # ─────────────────────────────────────────────
 if page == "خانه":
-    x_header("خانه", "نمای کلی هزینه‌ها و فعالیت‌ها")
+    x_header("خانه", "نمای کلی هزینه‌ها")
 
     overview = api_get("/analytics/overview")
     if show_api_error(overview):
@@ -379,7 +324,7 @@ if page == "خانه":
         c1.metric("مجموع هزینه", f"{overview.get('total_spent', 0):,.0f}")
         c2.metric("این ماه", f"{overview.get('this_month', 0):,.0f}")
         c3.metric("میانگین روزانه", f"{overview.get('avg_daily', 0):,.0f}")
-        c4.metric("تراکنش‌ها", overview.get("transaction_count", 0))
+        c4.metric("تعداد تراکنش", overview.get("transaction_count", 0))
 
         if overview.get("top_category"):
             st.markdown(
@@ -391,69 +336,48 @@ if page == "خانه":
     summary = api_get("/analytics/summary", params={"months": 12})
     if summary and not show_api_error(summary) and isinstance(summary, list) and summary:
         df_month = pd.DataFrame(summary)
-        if not df_month.empty and "month" in df_month.columns:
+        if not df_month.empty:
             left, right = st.columns([1.4, 1])
-
             with left:
                 fig = px.bar(
-                    df_month,
-                    x="month",
-                    y="total",
+                    df_month, x="month", y="total",
                     labels={"month": "", "total": ""},
                     color_discrete_sequence=["#1d9bf0"],
                 )
-                fig.update_traces(marker_line_width=0, opacity=0.95)
-                plotly_x_layout(fig, 340)
+                plotly_layout(fig)
                 fig.update_layout(title="روند ماهانه")
                 st.plotly_chart(fig, use_container_width=True)
-
             with right:
                 last = summary[-1]
                 if last.get("by_category"):
-                    cat_df = pd.DataFrame(
-                        list(last["by_category"].items()), columns=["دسته", "مبلغ"]
-                    )
+                    cat_df = pd.DataFrame(list(last["by_category"].items()), columns=["دسته", "مبلغ"])
                     fig2 = px.pie(
-                        cat_df,
-                        values="مبلغ",
-                        names="دسته",
-                        hole=0.62,
-                        color_discrete_sequence=[
-                            "#1d9bf0",
-                            "#00ba7c",
-                            "#ffd400",
-                            "#f4212e",
-                            "#7856ff",
-                            "#ff7a00",
-                            "#e7e9ea",
-                            "#71767b",
-                        ],
+                        cat_df, values="مبلغ", names="دسته", hole=0.62,
+                        color_discrete_sequence=["#1d9bf0", "#00ba7c", "#ffd400", "#f4212e", "#7856ff", "#ff7a00"],
                     )
-                    plotly_x_layout(fig2, 340)
-                    fig2.update_layout(title=f"دسته‌ها · {last.get('month', '')}")
-                    fig2.update_traces(textposition="outside", textinfo="percent")
+                    plotly_layout(fig2)
+                    fig2.update_layout(title="تقسیم دسته‌ها")
                     st.plotly_chart(fig2, use_container_width=True)
 
     st.markdown('<div class="x-title" style="font-size:1.1rem;margin:18px 0 10px">آخرین تراکنش‌ها</div>', unsafe_allow_html=True)
-    expenses = api_get("/expenses/", params={"limit": 12})
+    expenses = api_get("/expenses/", params={"limit": 15})
     if expenses and not show_api_error(expenses) and isinstance(expenses, list):
         if expenses:
-            df = pd.DataFrame(expenses)
-            df["دسته"] = df["category"].apply(
-                lambda x: x.get("name", "") if isinstance(x, dict) else ""
-            )
-            df["نوع"] = df.get("tx_type", "expense").apply(
-                lambda t: "درآمد" if t == "income" else "هزینه"
-            )
-            show = df[["date", "description", "amount", "دسته", "نوع"]].rename(
-                columns={"date": "تاریخ", "description": "توضیح", "amount": "مبلغ"}
-            )
-            st.dataframe(show, use_container_width=True, hide_index=True)
+            rows = []
+            for e in expenses:
+                rows.append({
+                    "تاریخ": to_jalali_str(e.get("date", "")),
+                    "توضیح": e.get("description", ""),
+                    "مبلغ": e.get("amount", 0),
+                    "دسته": e["category"]["name"] if isinstance(e.get("category"), dict) else "",
+                    "نوع": "درآمد" if e.get("tx_type") == "income" else "هزینه",
+                })
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
         else:
             st.markdown('<p class="x-muted">هنوز تراکنشی ثبت نشده.</p>', unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-# ADD TRANSACTION
+# ثبت تراکنش
 # ─────────────────────────────────────────────
 elif page == "ثبت تراکنش":
     x_header("ثبت تراکنش", "هزینه یا درآمد جدید")
@@ -463,66 +387,75 @@ elif page == "ثبت تراکنش":
         st.stop()
     cats = cats or []
     cat_options = {f"{c.get('icon', '')} {c['name']}": c["id"] for c in cats}
-
     if not cat_options:
-        st.warning("اول از صفحه «دسته‌ها» دسته‌های پیش‌فرض را بساز.")
+        st.warning("هنوز دسته‌ای نیست. به صفحه «دسته‌ها» بروید.")
         st.stop()
 
-    description = st.text_input("توضیح", placeholder="مثلاً: ناهار رستوران", key="exp_desc")
+    description = st.text_input("توضیح", placeholder="مثلاً: ناهار رستوران")
     if description and len(description) > 2:
         suggestion = api_get("/expenses/suggest-category", params={"description": description})
         if suggestion and not suggestion.get("__error__") and suggestion.get("suggested_category"):
             st.markdown(
-                f'<span class="x-chip">🤖 {html_module.escape(str(suggestion["suggested_category"]))}</span>',
+                f'<span class="x-chip">پیشنهاد دسته: {html_module.escape(str(suggestion["suggested_category"]))}</span>',
                 unsafe_allow_html=True,
             )
 
     c1, c2 = st.columns(2)
     with c1:
-        amount = st.number_input("مبلغ", min_value=1.0, step=1000.0, format="%.0f", key="exp_amount")
+        amount = st.number_input("مبلغ (تومان)", min_value=1.0, step=10000.0, format="%.0f")
     with c2:
-        exp_date = st.date_input("تاریخ", value=date.today(), key="exp_date")
+        g_date = jalali_date_picker("تاریخ (شمسی)", key="exp_date")
 
     c3, c4 = st.columns(2)
     with c3:
-        category = st.selectbox("دسته", options=list(cat_options.keys()), key="exp_cat")
+        category = st.selectbox("دسته", options=list(cat_options.keys()))
     with c4:
         tx_type = st.selectbox(
             "نوع",
             options=["expense", "income"],
             format_func=lambda x: "هزینه" if x == "expense" else "درآمد",
-            key="exp_type",
         )
 
-    notes = st.text_area("یادداشت", height=70, key="exp_notes", placeholder="اختیاری")
+    notes = st.text_area("یادداشت (اختیاری)", height=70)
 
     if st.button("ثبت", type="primary", use_container_width=True):
         if not description or not description.strip():
             st.error("توضیح را وارد کنید.")
         else:
-            payload = {
+            result = api_post("/expenses/", {
                 "amount": amount,
                 "description": description.strip(),
-                "date": exp_date.isoformat(),
+                "date": g_date.isoformat(),
                 "category_id": cat_options[category],
                 "notes": notes or None,
                 "tx_type": tx_type,
-            }
-            result = api_post("/expenses/", payload)
+            })
             if isinstance(result, dict) and result.get("__error__"):
                 show_api_error(result)
             elif result:
-                st.success("ثبت شد.")
+                st.success("با موفقیت ثبت شد.")
             else:
                 st.error("خطا در ذخیره.")
 
 # ─────────────────────────────────────────────
-# HABITS
+# عادت‌ها
 # ─────────────────────────────────────────────
 elif page == "عادت‌ها":
-    x_header("عادت‌ها", "پیگیری روزانه و streak")
+    x_header("عادت‌ها", "پیگیری کارهای روزانه")
 
-    tab1, tab2 = st.tabs(["لیست عادت‌ها", "عادت جدید"])
+    st.markdown(
+        """
+<div class="info-box">
+<strong>عادت چیست؟</strong><br>
+عادت یک کار روزانه (یا هفتگی) است که می‌خواهید مرتب انجامش دهید؛ مثلاً ورزش، مطالعه یا بدون فست‌فود بودن.<br><br>
+هر روز فقط <strong>یک‌بار</strong> می‌توانید تیک «انجام شد» بزنید. با هر تیک، شمارندهٔ پشت‌سرهم (استریک) افزایش می‌یابد.
+اگر یک روز را از دست بدهید، استریک فعلی صفر می‌شود ولی رکورد طولانی‌ترین استریک حفظ می‌شود.
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    tab1, tab2 = st.tabs(["لیست عادت‌ها", "ساخت عادت جدید"])
 
     with tab1:
         habits = api_get("/habits/")
@@ -530,39 +463,51 @@ elif page == "عادت‌ها":
             st.stop()
         habits = habits or []
         if not habits:
-            st.markdown('<p class="x-muted">عادتی ندارید. از تب کناری بسازید.</p>', unsafe_allow_html=True)
+            st.markdown('<p class="x-muted">عادتی ندارید. از تب کناری یکی بسازید.</p>', unsafe_allow_html=True)
+
         for h in habits:
             icon = html_module.escape(str(h.get("icon", "✅")))
             name = html_module.escape(str(h.get("name", "")))
+            desc = html_module.escape(str(h.get("description") or ""))
             st.markdown(
                 f'<div class="x-card"><div style="font-weight:700;font-size:1.05rem">{icon} {name}</div>'
-                f'<div class="x-muted">{html_module.escape(str(h.get("description") or ""))}</div></div>',
+                f'<div class="x-muted">{desc}</div></div>',
                 unsafe_allow_html=True,
             )
             streak = api_get(f"/habits/{h['id']}/streak")
             if streak and not streak.get("__error__"):
                 a, b, c = st.columns(3)
-                a.metric("streak", f"{streak.get('current_streak', 0)}")
-                b.metric("بیشینه", streak.get("longest_streak", 0))
-                c.metric("کل", streak.get("total_completed", 0))
-            if st.button("انجام شد · امروز", key=f"done_{h['id']}", type="primary"):
-                result = api_post(
-                    "/habits/log",
-                    {
-                        "habit_id": h["id"],
-                        "date": date.today().isoformat(),
-                        "completed": True,
-                    },
-                )
-                if result and not result.get("__error__"):
-                    st.success("ثبت شد")
-                    st.rerun()
-            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                a.metric("استریک فعلی", f"{streak.get('current_streak', 0)}")
+                b.metric("طولانی‌ترین", streak.get("longest_streak", 0))
+                c.metric("کل انجام‌شده", streak.get("total_completed", 0))
+
+            col_btn, col_msg = st.columns([1, 2])
+            with col_btn:
+                if st.button("انجام شد · امروز", key=f"done_{h['id']}", type="primary"):
+                    result = api_post(
+                        "/habits/log",
+                        {
+                            "habit_id": h["id"],
+                            "date": greg_date.today().isoformat(),
+                            "completed": True,
+                        },
+                    )
+                    if result and not result.get("__error__"):
+                        st.session_state[f"habit_ok_{h['id']}"] = True
+                        st.rerun()
+                    elif show_api_error(result):
+                        pass
+            if st.session_state.get(f"habit_ok_{h['id']}"):
+                st.success("برای امروز ثبت شد. آمار بالا به‌روز است.")
+                # پاک کردن فلگ تا پیام یک‌بار دیده شود
+                del st.session_state[f"habit_ok_{h['id']}"]
+
+            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
     with tab2:
-        name = st.text_input("نام", placeholder="مثلاً مطالعه ۲۰ صفحه")
+        name = st.text_input("نام عادت", placeholder="مثلاً مطالعه ۲۰ صفحه")
         icon = st.text_input("آیکون", value="📚")
-        desc = st.text_area("توضیح", height=70)
+        desc = st.text_area("توضیح (اختیاری)", height=70)
         freq = st.selectbox(
             "تکرار",
             ["daily", "weekly"],
@@ -570,25 +515,27 @@ elif page == "عادت‌ها":
         )
         if st.button("ساخت عادت", type="primary", use_container_width=True):
             if not name.strip():
-                st.error("نام لازم است.")
+                st.error("نام عادت لازم است.")
             else:
                 result = api_post(
                     "/habits/",
                     {
-                        "name": name,
+                        "name": name.strip(),
                         "icon": icon,
                         "description": desc,
                         "target_frequency": freq,
                     },
                 )
                 if result and not result.get("__error__"):
-                    st.success("ساخته شد.")
+                    st.success("عادت ساخته شد.")
                     st.rerun()
-                elif show_api_error(result):
-                    pass
+                elif isinstance(result, dict) and result.get("__error__"):
+                    show_api_error(result)
+                else:
+                    st.error("ساخت عادت ناموفق بود.")
 
 # ─────────────────────────────────────────────
-# ANALYTICS
+# تحلیل
 # ─────────────────────────────────────────────
 elif page == "تحلیل":
     x_header("تحلیل", "پیش‌بینی و الگوها")
@@ -600,20 +547,28 @@ elif page == "تحلیل":
     if pred and not pred.get("__error__"):
         c1, c2, c3 = st.columns(3)
         c1.metric("تخمین ماه بعد", f"{pred.get('next_month_estimate', 0):,.0f}")
-        c2.metric("اطمینان", str(pred.get("confidence", "")).upper())
-        c3.metric("روش", str(pred.get("method", "")).replace("_", " "))
+        conf_map = {"high": "بالا", "medium": "متوسط", "low": "کم"}
+        conf = str(pred.get("confidence", "")).lower()
+        c2.metric("میزان اطمینان", conf_map.get(conf, conf))
+        method_map = {
+            "linear_regression": "رگرسیون خطی",
+            "simple_average": "میانگین ساده",
+            "insufficient_data": "داده ناکافی",
+        }
+        method = str(pred.get("method", ""))
+        c3.metric("روش", method_map.get(method, method))
 
         details = pred.get("details") or {}
         interval = details.get("prediction_interval_95")
         if interval:
             st.markdown(
-                f'<p class="x-muted">بازه تقریبی ۹۵٪: {interval[0]:,.0f} — {interval[1]:,.0f}</p>',
+                f'<p class="x-muted">بازه تقریبی ۹۵٪: {interval[0]:,.0f} تا {interval[1]:,.0f}</p>',
                 unsafe_allow_html=True,
             )
         with st.expander("جزئیات مدل"):
             st.json(details)
 
-    st.markdown('<div class="x-title" style="font-size:1.1rem;margin:20px 0 12px">الگوها</div>', unsafe_allow_html=True)
+    st.markdown('<div class="x-title" style="font-size:1.1rem;margin:20px 0 12px">الگوهای شناسایی‌شده</div>', unsafe_allow_html=True)
     insights = api_get("/analytics/insights")
     if insights and not show_api_error(insights) and isinstance(insights, list):
         if not insights:
@@ -633,37 +588,78 @@ elif page == "تحلیل":
             )
 
 # ─────────────────────────────────────────────
-# CATEGORIES
+# دسته‌ها
 # ─────────────────────────────────────────────
 elif page == "دسته‌ها":
-    x_header("دسته‌ها", "مدیریت برچسب‌های هزینه")
+    x_header("دسته‌ها", "دسته‌های پیش‌فرض و دسته‌های خودتان")
 
-    if st.button("ساخت دسته‌های پیش‌فرض", type="primary"):
-        result = api_post("/categories/seed", {})
-        if result and not result.get("__error__"):
-            st.success(f"{len(result)} دسته ساخته شد")
-            st.rerun()
-        elif show_api_error(result):
-            pass
+    st.markdown(
+        """
+<div class="info-box">
+هنگام نصب، چند دستهٔ فارسی به‌صورت خودکار ساخته می‌شود.
+می‌توانید دستهٔ جدید هم اضافه کنید (مثلاً «اجاره» یا «قسط»).
+</div>
+""",
+        unsafe_allow_html=True,
+    )
 
-    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+    tab1, tab2 = st.tabs(["لیست دسته‌ها", "افزودن دسته جدید"])
 
-    cats = api_get("/categories/")
-    if show_api_error(cats):
-        st.stop()
-    cats = cats or []
-    if not cats:
-        st.markdown('<p class="x-muted">دسته‌ای وجود ندارد.</p>', unsafe_allow_html=True)
-    else:
-        cols = st.columns(3)
-        for i, c in enumerate(cats):
-            with cols[i % 3]:
-                color = c.get("color", "#1d9bf0")
-                safe_name = html_module.escape(str(c.get("name", "")))
-                safe_icon = html_module.escape(str(c.get("icon", "")))
-                st.markdown(
-                    f'<div class="cat-tile" style="border-right:3px solid {color}">'
-                    f'<div style="font-size:1.3rem;margin-bottom:4px">{safe_icon}</div>'
-                    f'<div style="font-weight:600">{safe_name}</div></div>',
-                    unsafe_allow_html=True,
+    with tab1:
+        if st.button("بارگذاری مجدد دسته‌های پیش‌فرض"):
+            result = api_post("/categories/seed", {})
+            if result is not None and not (isinstance(result, dict) and result.get("__error__")):
+                st.success(f"{len(result) if isinstance(result, list) else 0} دسته اضافه/بررسی شد.")
+                st.rerun()
+            elif show_api_error(result):
+                pass
+
+        cats = api_get("/categories/")
+        if show_api_error(cats):
+            st.stop()
+        cats = cats or []
+        if not cats:
+            st.markdown('<p class="x-muted">دسته‌ای وجود ندارد.</p>', unsafe_allow_html=True)
+        else:
+            cols = st.columns(3)
+            for i, c in enumerate(cats):
+                with cols[i % 3]:
+                    color = c.get("color", "#1d9bf0")
+                    safe_name = html_module.escape(str(c.get("name", "")))
+                    safe_icon = html_module.escape(str(c.get("icon", "")))
+                    st.markdown(
+                        f'<div class="cat-tile" style="border-right:3px solid {color}">'
+                        f'<div style="font-size:1.3rem;margin-bottom:4px">{safe_icon}</div>'
+                        f'<div style="font-weight:600">{safe_name}</div></div>',
+                        unsafe_allow_html=True,
+                    )
+
+    with tab2:
+        st.markdown("**دسته جدید بسازید**")
+        new_name = st.text_input("نام دسته", placeholder="مثلاً اجاره خانه")
+        new_icon = st.text_input("آیکون", value="📌")
+        new_color = st.color_picker("رنگ", value="#1d9bf0")
+        if st.button("افزودن دسته", type="primary", use_container_width=True):
+            if not new_name.strip():
+                st.error("نام دسته لازم است.")
+            else:
+                result = api_post(
+                    "/categories/",
+                    {
+                        "name": new_name.strip(),
+                        "icon": new_icon or "📌",
+                        "color": new_color,
+                    },
                 )
+                if result and not result.get("__error__"):
+                    st.success(f"دسته «{new_name.strip()}» اضافه شد.")
+                    st.rerun()
+                elif isinstance(result, dict) and result.get("__error__"):
+                    # ممکن است پیام ۴۰۰ باشد
+                    err = result["__error__"]
+                    if "400" in str(err) or "exists" in str(err).lower() or "وجود" in str(err):
+                        st.error("این دسته از قبل وجود دارد.")
+                    else:
+                        show_api_error(result)
+                else:
+                    st.error("افزودن دسته ناموفق بود. شاید نام تکراری باشد.")

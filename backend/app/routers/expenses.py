@@ -28,7 +28,7 @@ def create_expense(payload: ExpenseCreate, db: Session = Depends(get_db)):
 
     # auto-mark salary category as income if client forgot
     data = payload.model_dump()
-    if cat.name.strip().lower() in {"salary / income", "salary", "income"}:
+    if cat.name.strip().lower() in {"salary / income", "salary", "income", "حقوق و درآمد", "حقوق", "درآمد"}:
         data["tx_type"] = "income"
 
     expense = Expense(**data)

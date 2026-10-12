@@ -2,24 +2,30 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .database import init_db
+from .database import init_db, SessionLocal
 from .routers import expenses, categories, habits, analytics
+from .routers.categories import ensure_default_categories
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    # هنگام اولین اجرا، دسته‌های پیش‌فرض فارسی ساخته می‌شوند
+    db = SessionLocal()
+    try:
+        ensure_default_categories(db)
+    finally:
+        db.close()
     yield
 
 
 app = FastAPI(
-    title="Smart Expense & Habit Tracker API",
-    description="Expense tracking + statistical insights + habit streaks",
-    version="1.1.0",
+    title="مدیریت هزینه هوشمند",
+    description="ثبت هزینه، عادت‌ها و تحلیل آماری",
+    version="1.6.0",
     lifespan=lifespan,
 )
 
-# Restrict CORS to local frontend only (safer for personal finance data)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -42,9 +48,9 @@ app.include_router(analytics.router, prefix="/api")
 @app.get("/")
 def root():
     return {
-        "message": "Smart Expense & Habit Tracker API is running",
+        "message": "API مدیریت هزینه در حال اجراست",
         "docs": "/docs",
-        "version": "1.1.0",
+        "version": "1.6.0",
     }
 
 
