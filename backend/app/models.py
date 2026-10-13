@@ -1,5 +1,7 @@
 from datetime import datetime, date, timezone
-from sqlalchemy import String, Float, Date, DateTime, Text, ForeignKey, Integer, Boolean
+from sqlalchemy import (
+    String, Float, Date, DateTime, Text, ForeignKey, Integer, Boolean, UniqueConstraint
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .database import Base
 
@@ -20,12 +22,12 @@ class Expense(Base):
     __tablename__ = "expenses"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    # مبلغ به تومان (عدد صحیح) — Float برای پول مناسب نیست
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
     description: Mapped[str] = mapped_column(String(255), nullable=False)
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # "expense" | "income" — income is excluded from spending stats
     tx_type: Mapped[str] = mapped_column(String(20), default="expense", index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc)
@@ -54,6 +56,9 @@ class Habit(Base):
 
 class HabitLog(Base):
     __tablename__ = "habit_logs"
+    __table_args__ = (
+        UniqueConstraint("habit_id", "date", name="uq_habit_log_day"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     habit_id: Mapped[int] = mapped_column(ForeignKey("habits.id"), nullable=False)

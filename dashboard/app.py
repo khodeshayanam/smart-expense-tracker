@@ -166,9 +166,9 @@ def jalali_date_picker(label: str, key: str, default: jdatetime.date | None = No
     with c1:
         year = st.selectbox(
             "سال",
-            options=list(range(today_j.year - 5, today_j.year + 2)),
-            index=list(range(today_j.year - 5, today_j.year + 2)).index(default.year)
-            if default.year in range(today_j.year - 5, today_j.year + 2)
+            options=list(range(today_j.year - 15, today_j.year + 1)),
+            index=list(range(today_j.year - 15, today_j.year + 1)).index(default.year)
+            if default.year in range(today_j.year - 15, today_j.year + 1)
             else 5,
             key=f"{key}_y",
             label_visibility="collapsed",
@@ -235,8 +235,13 @@ API_URL = st.sidebar.text_input(
 
 def api_get(path: str, params=None):
     try:
-        r = requests.get(f"{API_URL}{path}", params=params, timeout=6)
-        r.raise_for_status()
+        r = requests.get(f"{API_URL}{path}", params=params, timeout=15)
+        if r.status_code >= 400:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            return {"__error__": detail, "__status__": r.status_code}
         return r.json()
     except requests.exceptions.ConnectionError:
         return {"__error__": "connection"}
@@ -246,9 +251,48 @@ def api_get(path: str, params=None):
 
 def api_post(path: str, json_data: dict = None):
     try:
-        r = requests.post(f"{API_URL}{path}", json=json_data or {}, timeout=6)
-        r.raise_for_status()
+        r = requests.post(f"{API_URL}{path}", json=json_data or {}, timeout=15)
+        if r.status_code >= 400:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            return {"__error__": detail, "__status__": r.status_code}
+        if r.status_code == 204 or not r.content:
+            return {"ok": True}
         return r.json()
+    except requests.exceptions.ConnectionError:
+        return {"__error__": "connection"}
+    except Exception as e:
+        return {"__error__": str(e)}
+
+
+def api_patch(path: str, json_data: dict = None):
+    try:
+        r = requests.patch(f"{API_URL}{path}", json=json_data or {}, timeout=15)
+        if r.status_code >= 400:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            return {"__error__": detail, "__status__": r.status_code}
+        return r.json()
+    except requests.exceptions.ConnectionError:
+        return {"__error__": "connection"}
+    except Exception as e:
+        return {"__error__": str(e)}
+
+
+def api_delete(path: str):
+    try:
+        r = requests.delete(f"{API_URL}{path}", timeout=15)
+        if r.status_code >= 400:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            return {"__error__": detail, "__status__": r.status_code}
+        return {"ok": True}
     except requests.exceptions.ConnectionError:
         return {"__error__": "connection"}
     except Exception as e:
@@ -300,12 +344,12 @@ def plotly_layout(fig, height=340):
 # ─────────────────────────────────────────────
 page = st.sidebar.radio(
     "منو",
-    ["خانه", "ثبت تراکنش", "عادت‌ها", "تحلیل", "دسته‌ها"],
+    ["خانه", "ثبت تراکنش", "مدیریت تراکنش‌ها", "عادت‌ها", "تحلیل", "دسته‌ها"],
     label_visibility="collapsed",
 )
 st.sidebar.markdown("---")
 st.sidebar.markdown(
-    '<p class="x-muted" style="padding:0 8px">نسخه ۱.۶</p>',
+    '<p class="x-muted" style="padding:0 8px">نسخه ۱.۷</p>',
     unsafe_allow_html=True,
 )
 
@@ -332,6 +376,23 @@ if page == "خانه":
                 f'<span class="x-muted" style="margin-right:10px">پرهزینه‌ترین دسته</span></div>',
                 unsafe_allow_html=True,
             )
+
+        # خلاصه درآمد این ماه
+        incomes = api_get("/expenses/", params={"tx_type": "income", "limit": 200})
+        if incomes and isinstance(incomes, list) and not (isinstance(incomes, dict) and incomes.get("__error__")):
+            this_m = greg_date.today().replace(day=1)
+            inc_sum = sum(
+                float(x.get("amount") or 0)
+                for x in incomes
+                if str(x.get("date", "")) >= this_m.isoformat()
+            )
+            if inc_sum > 0:
+                spent = float(overview.get("this_month") or 0)
+                st.markdown(
+                    f'<p class="x-muted">درآمد این ماه: <b>{inc_sum:,.0f}</b> — '
+                    f'مانده تقریبی: <b>{inc_sum - spent:,.0f}</b></p>',
+                    unsafe_allow_html=True,
+                )
 
     summary = api_get("/analytics/summary", params={"months": 12})
     if summary and not show_api_error(summary) and isinstance(summary, list) and summary:
@@ -440,6 +501,63 @@ elif page == "ثبت تراکنش":
 # ─────────────────────────────────────────────
 # عادت‌ها
 # ─────────────────────────────────────────────
+elif page == "مدیریت تراکنش‌ها":
+    x_header("مدیریت تراکنش‌ها", "ویرایش، حذف و مشاهده درآمد/هزینه")
+
+    filter_type = st.selectbox(
+        "فیلتر نوع",
+        options=["همه", "expense", "income"],
+        format_func=lambda x: {"همه": "همه", "expense": "فقط هزینه", "income": "فقط درآمد"}[x],
+    )
+    params = {"limit": 50}
+    if filter_type != "همه":
+        params["tx_type"] = filter_type
+
+    expenses = api_get("/expenses/", params=params)
+    if show_api_error(expenses):
+        st.stop()
+    expenses = expenses or []
+
+    if not expenses:
+        st.markdown('<p class="x-muted">موردی نیست.</p>', unsafe_allow_html=True)
+    else:
+        for e in expenses:
+            eid = e["id"]
+            cat = e["category"]["name"] if isinstance(e.get("category"), dict) else ""
+            kind = "درآمد" if e.get("tx_type") == "income" else "هزینه"
+            with st.expander(f"{to_jalali_str(e.get('date',''))} · {e.get('description','')} · {e.get('amount',0):,.0f} · {kind}"):
+                st.write(f"دسته: **{cat}**")
+                new_desc = st.text_input("توضیح", value=e.get("description", ""), key=f"ed_desc_{eid}")
+                new_amt = st.number_input("مبلغ", min_value=1, value=int(e.get("amount", 1)), key=f"ed_amt_{eid}")
+                new_type = st.selectbox(
+                    "نوع",
+                    ["expense", "income"],
+                    index=0 if e.get("tx_type") != "income" else 1,
+                    format_func=lambda x: "هزینه" if x == "expense" else "درآمد",
+                    key=f"ed_type_{eid}",
+                )
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("ذخیره تغییرات", key=f"save_{eid}", type="primary"):
+                        res = api_patch(f"/expenses/{eid}", {
+                            "description": new_desc,
+                            "amount": int(new_amt),
+                            "tx_type": new_type,
+                        })
+                        if res and not res.get("__error__"):
+                            st.success("ذخیره شد")
+                            st.rerun()
+                        else:
+                            show_api_error(res)
+                with c2:
+                    if st.button("حذف", key=f"del_{eid}"):
+                        res = api_delete(f"/expenses/{eid}")
+                        if res and not res.get("__error__"):
+                            st.success("حذف شد")
+                            st.rerun()
+                        else:
+                            show_api_error(res)
+
 elif page == "عادت‌ها":
     x_header("عادت‌ها", "پیگیری کارهای روزانه")
 
@@ -481,8 +599,8 @@ elif page == "عادت‌ها":
                 b.metric("طولانی‌ترین", streak.get("longest_streak", 0))
                 c.metric("کل انجام‌شده", streak.get("total_completed", 0))
 
-            col_btn, col_msg = st.columns([1, 2])
-            with col_btn:
+            b1, b2 = st.columns(2)
+            with b1:
                 if st.button("انجام شد · امروز", key=f"done_{h['id']}", type="primary"):
                     result = api_post(
                         "/habits/log",
@@ -493,14 +611,25 @@ elif page == "عادت‌ها":
                         },
                     )
                     if result and not result.get("__error__"):
-                        st.session_state[f"habit_ok_{h['id']}"] = True
+                        st.toast("ثبت شد")
                         st.rerun()
-                    elif show_api_error(result):
-                        pass
-            if st.session_state.get(f"habit_ok_{h['id']}"):
-                st.success("برای امروز ثبت شد. آمار بالا به‌روز است.")
-                # پاک کردن فلگ تا پیام یک‌بار دیده شود
-                del st.session_state[f"habit_ok_{h['id']}"]
+                    else:
+                        show_api_error(result)
+            with b2:
+                if st.button("برداشت تیک امروز", key=f"undo_{h['id']}"):
+                    result = api_post(
+                        "/habits/log",
+                        {
+                            "habit_id": h["id"],
+                            "date": greg_date.today().isoformat(),
+                            "completed": False,
+                        },
+                    )
+                    if result and not result.get("__error__"):
+                        st.toast("تیک امروز برداشته شد")
+                        st.rerun()
+                    else:
+                        show_api_error(result)
 
             st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 

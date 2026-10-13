@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="مدیریت هزینه هوشمند",
     description="ثبت هزینه، عادت‌ها و تحلیل آماری",
-    version="1.6.0",
+    version="1.7.0",
     lifespan=lifespan,
 )
 
@@ -50,7 +50,7 @@ def root():
     return {
         "message": "API مدیریت هزینه در حال اجراست",
         "docs": "/docs",
-        "version": "1.6.0",
+        "version": "1.7.0",
     }
 
 

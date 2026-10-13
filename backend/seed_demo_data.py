@@ -50,7 +50,7 @@ def seed(reset: bool = False):
             existing[item["name"]] = cat
     db.commit()
 
-    if db.query(Expense).count() < 30:
+    if db.query(Expense).count() == 0:
         print("در حال ساخت تراکنش‌های نمونه...")
         today = date.today()
         for i in range(90):
@@ -59,7 +59,7 @@ def seed(reset: bool = False):
                 cat_name = random.choice(list(DESCRIPTIONS.keys()))
                 cat = existing[cat_name]
                 desc = random.choice(DESCRIPTIONS[cat_name])
-                amount = round(random.uniform(50000, 850000) * random.choice([1, 1, 1, 2]), 0)
+                amount = int(round(random.uniform(50000, 850000) * random.choice([1, 1, 1, 2]), 0))
                 db.add(Expense(
                     amount=amount,
                     description=desc,
@@ -70,7 +70,7 @@ def seed(reset: bool = False):
                 ))
             if d.day == 1 and "حقوق و درآمد" in existing:
                 db.add(Expense(
-                    amount=25_000_000,
+                    amount=25000000,
                     description="حقوق ماهانه",
                     date=d,
                     category_id=existing["حقوق و درآمد"].id,

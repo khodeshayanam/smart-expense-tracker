@@ -51,7 +51,7 @@ class CategoryOut(CategoryBase):
 
 # ──────────── Expense ────────────
 class ExpenseBase(BaseModel):
-    amount: float = Field(..., gt=0, le=1_000_000_000)
+    amount: int = Field(..., gt=0, le=1_000_000_000)
     description: str = Field(..., min_length=1, max_length=255)
     date: dt_date
     category_id: int
@@ -68,9 +68,9 @@ class ExpenseBase(BaseModel):
 
     @field_validator("date")
     @classmethod
-    def no_far_future(cls, v: dt_date) -> dt_date:
-        if v > dt_date.today() + timedelta(days=365):
-            raise ValueError("date cannot be more than 1 year in the future")
+    def no_future_expense(cls, v: dt_date) -> dt_date:
+        if v > dt_date.today():
+            raise ValueError("تاریخ هزینه نمی‌تواند در آینده باشد")
         return v
 
 
@@ -79,7 +79,7 @@ class ExpenseCreate(ExpenseBase):
 
 
 class ExpenseUpdate(BaseModel):
-    amount: Optional[float] = Field(None, gt=0, le=1_000_000_000)
+    amount: Optional[int] = Field(None, gt=0, le=1_000_000_000)
     description: Optional[str] = Field(None, min_length=1, max_length=255)
     date: Optional[dt_date] = None
     category_id: Optional[int] = None
@@ -98,9 +98,12 @@ class ExpenseUpdate(BaseModel):
 
     @field_validator("date")
     @classmethod
-    def no_far_future_update(cls, v: Optional[dt_date]) -> Optional[dt_date]:
+    def no_future_update(cls, v: Optional[dt_date]) -> Optional[dt_date]:
         if v is None:
             return v
+        if v > dt_date.today():
+            raise ValueError("تاریخ هزینه نمی‌تواند در آینده باشد")
+        return v
         if v > dt_date.today() + timedelta(days=365):
             raise ValueError("date cannot be more than 1 year in the future")
         return v

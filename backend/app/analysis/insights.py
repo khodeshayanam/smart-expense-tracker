@@ -50,16 +50,8 @@ def expenses_to_df(db: Session, expenses_only: bool = True) -> pd.DataFrame:
     df["weekday"] = df["date"].dt.day_name()
     df["day"] = df["date"].dt.day
 
-    # Normalize legacy rows: missing/blank tx_type + salary category => income
-    def _is_expense(row) -> bool:
-        t = (row["tx_type"] or "expense").lower()
-        if t == "income":
-            return False
-        if str(row["category"]).strip().lower() in INCOME_CATEGORY_NAMES:
-            return False
-        return True
-
-    df["_is_expense"] = df.apply(_is_expense, axis=1)
+    # فقط فیلد tx_type تعیین‌کننده است (دسته آن را لغو نمی‌کند)
+    df["_is_expense"] = df["tx_type"].fillna("expense").str.lower() != "income"
 
     if expenses_only:
         df = df[df["_is_expense"]].copy()
@@ -193,45 +185,42 @@ def predict_next_month(db: Session) -> dict:
 
 
 def detect_patterns(db: Session) -> list[dict]:
-    """Pattern detection with minimum-sample guards."""
+    """تشخیص الگو با حداقل نمونه و پیام‌های فارسی."""
     df = expenses_to_df(db, expenses_only=True)
     insights: list[dict] = []
 
-    if df.empty:
-        return [
-            {
-                "type": "info",
-                "title": "No data yet",
-                "description": "Start logging expenses to unlock smart insights.",
-                "severity": "info",
-            }
-        ]
+    weekday_fa = {
+        "Saturday": "شنبه", "Sunday": "یکشنبه", "Monday": "دوشنبه",
+        "Tuesday": "سه‌شنبه", "Wednesday": "چهارشنبه", "Thursday": "پنجشنبه",
+        "Friday": "جمعه",
+    }
 
-    MIN_TX = 15  # global minimum before most insights fire
+    if df.empty:
+        return [{
+            "type": "info",
+            "title": "هنوز داده‌ای نیست",
+            "description": "با ثبت هزینه، بینش‌ها فعال می‌شوند.",
+            "severity": "info",
+        }]
+
+    MIN_TX = 15
     n = len(df)
 
-    # 1. Weekday pattern — need enough data and enough days represented
     if n >= MIN_TX and df["weekday"].nunique() >= 4:
         weekday_avg = df.groupby("weekday")["amount"].mean().sort_values(ascending=False)
         overall = float(weekday_avg.mean())
         if overall > 0 and weekday_avg.iloc[0] > overall * 1.5:
             top_day = weekday_avg.index[0]
             pct = (weekday_avg.iloc[0] / overall - 1) * 100
-            # require at least 3 tx on that day
             if (df["weekday"] == top_day).sum() >= 3:
-                insights.append(
-                    {
-                        "type": "weekday",
-                        "title": f"High spending on {top_day}s",
-                        "description": (
-                            f"Average {weekday_avg.iloc[0]:.0f} on {top_day}s — "
-                            f"{pct:.0f}% above the weekday average."
-                        ),
-                        "severity": "warning",
-                    }
-                )
+                day_fa = weekday_fa.get(top_day, top_day)
+                insights.append({
+                    "type": "weekday",
+                    "title": f"هزینه بالا در {day_fa}",
+                    "description": f"میانگین {weekday_avg.iloc[0]:,.0f} در {day_fa} — حدود {pct:.0f}٪ بیشتر از میانگین روزهای هفته.",
+                    "severity": "warning",
+                })
 
-    # 2. Category concentration
     if n >= MIN_TX:
         cat_total = df.groupby("category")["amount"].sum().sort_values(ascending=False)
         total = float(cat_total.sum())
@@ -239,30 +228,20 @@ def detect_patterns(db: Session) -> list[dict]:
             top_cat = cat_total.index[0]
             share = cat_total.iloc[0] / total
             if share > 0.45 and len(cat_total) >= 2:
-                insights.append(
-                    {
-                        "type": "category",
-                        "title": f"Heavy focus on «{top_cat}»",
-                        "description": (
-                            f"{share * 100:.0f}% of spending goes to {top_cat}. "
-                            "Consider reviewing this category."
-                        ),
-                        "severity": "warning",
-                    }
-                )
+                insights.append({
+                    "type": "category",
+                    "title": f"تمرکز زیاد روی «{top_cat}»",
+                    "description": f"{share * 100:.0f}٪ هزینه‌ها مربوط به {top_cat} است. این دسته را بررسی کنید.",
+                    "severity": "warning",
+                })
             elif share <= 0.45:
-                insights.append(
-                    {
-                        "type": "category",
-                        "title": "Balanced categories",
-                        "description": (
-                            f"Top category ({top_cat}) is only {share * 100:.0f}% — good diversity."
-                        ),
-                        "severity": "success",
-                    }
-                )
+                insights.append({
+                    "type": "category",
+                    "title": "دسته‌بندی متعادل",
+                    "description": f"دستهٔ برتر ({top_cat}) فقط {share * 100:.0f}٪ است — تنوع خوبی دارید.",
+                    "severity": "success",
+                })
 
-    # 3. Recent trend — need enough transactions in both windows
     recent = df[df["date"] >= (pd.Timestamp.now() - pd.Timedelta(days=30))]
     prev = df[
         (df["date"] >= (pd.Timestamp.now() - pd.Timedelta(days=60)))
@@ -273,33 +252,22 @@ def detect_patterns(db: Session) -> list[dict]:
         prev_sum = float(prev["amount"].sum())
         if prev_sum > 0:
             change = (recent_sum - prev_sum) / prev_sum * 100
-            # cap absurd percentages from tiny bases
             if abs(change) < 500:
                 if change > 25:
-                    insights.append(
-                        {
-                            "type": "trend",
-                            "title": "Spending increased recently",
-                            "description": (
-                                f"You spent {change:.0f}% more in the last 30 days "
-                                "vs the previous 30 days."
-                            ),
-                            "severity": "warning",
-                        }
-                    )
+                    insights.append({
+                        "type": "trend",
+                        "title": "هزینه اخیراً افزایش یافته",
+                        "description": f"در ۳۰ روز اخیر حدود {change:.0f}٪ بیشتر از ۳۰ روز قبل خرج کرده‌اید.",
+                        "severity": "warning",
+                    })
                 elif change < -15:
-                    insights.append(
-                        {
-                            "type": "trend",
-                            "title": "Great control recently!",
-                            "description": (
-                                f"Spending is down {abs(change):.0f}% vs the previous 30 days."
-                            ),
-                            "severity": "success",
-                        }
-                    )
+                    insights.append({
+                        "type": "trend",
+                        "title": "کنترل خوب اخیراً",
+                        "description": f"هزینه حدود {abs(change):.0f}٪ نسبت به ۳۰ روز قبل کمتر شده است.",
+                        "severity": "success",
+                    })
 
-    # 4. Outliers via IQR (robust) — not quantile which fails on identical values
     if n >= MIN_TX:
         q1 = float(df["amount"].quantile(0.25))
         q3 = float(df["amount"].quantile(0.75))
@@ -307,57 +275,64 @@ def detect_patterns(db: Session) -> list[dict]:
         if iqr > 0:
             threshold = q3 + 1.5 * iqr
             big = df[df["amount"] > threshold]
-            if 0 < len(big) <= max(n * 0.15, 1):  # not "everything"
-                insights.append(
-                    {
-                        "type": "outliers",
-                        "title": f"{len(big)} large transaction(s) detected",
-                        "description": (
-                            f"Amounts above {threshold:.0f} stand out from the rest. "
-                            "Review them if unexpected."
-                        ),
-                        "severity": "info",
-                    }
-                )
+            if 0 < len(big) <= max(n * 0.15, 1):
+                insights.append({
+                    "type": "outliers",
+                    "title": f"{len(big)} تراکنش بزرگ",
+                    "description": f"مبالغ بالای {threshold:,.0f} از بقیه متمایزند. در صورت نیاز بررسی کنید.",
+                    "severity": "info",
+                })
 
     if not insights and n < MIN_TX:
-        insights.append(
-            {
-                "type": "info",
-                "title": "Not enough data yet",
-                "description": f"Log at least {MIN_TX} expenses to unlock pattern insights.",
-                "severity": "info",
-            }
-        )
+        insights.append({
+            "type": "info",
+            "title": "داده کافی نیست",
+            "description": f"حداقل {MIN_TX} هزینه ثبت کنید تا الگوها فعال شوند.",
+            "severity": "info",
+        })
 
     return insights
 
 
+_suggest_cache: dict = {"n": -1, "pipeline": None, "classes": None}
+
+
 def suggest_category(db: Session, description: str) -> str | None:
-    """TF-IDF + Naive Bayes category suggestion (expenses only)."""
+    """پیشنهاد دسته با کش مدل (فقط وقتی تعداد تراکنش عوض شود دوباره آموزش)."""
     df = expenses_to_df(db, expenses_only=True)
     if len(df) < 15:
         return None
 
     try:
-        pipeline = Pipeline(
-            [
-                ("tfidf", TfidfVectorizer(max_features=500, ngram_range=(1, 2))),
-                ("clf", MultinomialNB()),
-            ]
-        )
-        pipeline.fit(df["description"].fillna(""), df["category"])
+        n = len(df)
+        if _suggest_cache["pipeline"] is None or _suggest_cache["n"] != n:
+            pipeline = Pipeline(
+                [
+                    ("tfidf", TfidfVectorizer(max_features=500, ngram_range=(1, 2))),
+                    ("clf", MultinomialNB()),
+                ]
+            )
+            pipeline.fit(df["description"].fillna(""), df["category"])
+            _suggest_cache["pipeline"] = pipeline
+            _suggest_cache["n"] = n
+
+        pipeline = _suggest_cache["pipeline"]
         proba = pipeline.predict_proba([description])[0]
         best_idx = int(np.argmax(proba))
         if proba[best_idx] < 0.35:
-            return None  # not confident enough
+            return None
         return str(pipeline.classes_[best_idx])
     except Exception:
         return None
 
 
 def habit_streak(db: Session, habit_id: int) -> dict:
-    """Current and longest consecutive daily streaks."""
+    """استریک روزانه یا هفتگی بر اساس target_frequency عادت."""
+    from ..models import Habit
+
+    habit = db.get(Habit, habit_id)
+    freq = (habit.target_frequency if habit else "daily") or "daily"
+
     logs = (
         db.query(HabitLog)
         .filter(HabitLog.habit_id == habit_id, HabitLog.completed == True)
@@ -365,13 +340,73 @@ def habit_streak(db: Session, habit_id: int) -> dict:
         .all()
     )
     if not logs:
-        return {"current_streak": 0, "longest_streak": 0, "total_completed": 0}
+        return {"current_streak": 0, "longest_streak": 0, "total_completed": 0, "frequency": freq}
 
     dates = sorted({log.date for log in logs})
     total_completed = len(dates)
-    dates_set = set(dates)
     today = date.today()
 
+    if freq == "weekly":
+        # هفته‌های ISO که حداقل یک لاگ دارند
+        weeks = sorted({d.isocalendar()[:2] for d in dates})  # (year, week)
+        total_completed = len(weeks)
+        week_set = set(weeks)
+
+        def week_key(d: date):
+            return d.isocalendar()[:2]
+
+        cur_week = week_key(today)
+        # اگر این هفته لاگ نباشد، از هفته قبل شروع کن
+        if cur_week not in week_set:
+            y, w = cur_week
+            # تقریبی: یک هفته عقب
+            prev = today - timedelta(days=7)
+            cur_week = week_key(prev)
+            if cur_week not in week_set:
+                current = 0
+            else:
+                current = 0
+                cursor = cur_week
+                while cursor in week_set:
+                    current += 1
+                    # week - 1
+                    y, w = cursor
+                    if w > 1:
+                        cursor = (y, w - 1)
+                    else:
+                        cursor = (y - 1, 52)
+        else:
+            current = 0
+            cursor = cur_week
+            while cursor in week_set:
+                current += 1
+                y, w = cursor
+                if w > 1:
+                    cursor = (y, w - 1)
+                else:
+                    cursor = (y - 1, 52)
+
+        longest = 1 if weeks else 0
+        temp = 1
+        for i in range(1, len(weeks)):
+            y0, w0 = weeks[i - 1]
+            y1, w1 = weeks[i]
+            consecutive = (y1 == y0 and w1 == w0 + 1) or (y1 == y0 + 1 and w0 >= 52 and w1 == 1)
+            if consecutive:
+                temp += 1
+                longest = max(longest, temp)
+            else:
+                temp = 1
+        longest = max(longest, current)
+        return {
+            "current_streak": current,
+            "longest_streak": longest,
+            "total_completed": total_completed,
+            "frequency": "weekly",
+        }
+
+    # daily
+    dates_set = set(dates)
     if today in dates_set:
         cursor = today
     elif (today - timedelta(days=1)) in dates_set:
@@ -393,13 +428,13 @@ def habit_streak(db: Session, habit_id: int) -> dict:
             longest = max(longest, temp)
         else:
             temp = 1
-
     longest = max(longest, current)
 
     return {
         "current_streak": current,
         "longest_streak": longest,
         "total_completed": total_completed,
+        "frequency": "daily",
     }
 
 

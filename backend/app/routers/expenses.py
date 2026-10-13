@@ -24,14 +24,9 @@ def _reload(db: Session, expense_id: int) -> Expense:
 def create_expense(payload: ExpenseCreate, db: Session = Depends(get_db)):
     cat = db.get(Category, payload.category_id)
     if not cat:
-        raise HTTPException(400, "Invalid category_id")
-
-    # auto-mark salary category as income if client forgot
-    data = payload.model_dump()
-    if cat.name.strip().lower() in {"salary / income", "salary", "income", "حقوق و درآمد", "حقوق", "درآمد"}:
-        data["tx_type"] = "income"
-
-    expense = Expense(**data)
+        raise HTTPException(400, "دسته نامعتبر است")
+    # tx_type فقط از ورودی کاربر می‌آید — دسته آن را عوض نمی‌کند
+    expense = Expense(**payload.model_dump())
     db.add(expense)
     db.commit()
     return _reload(db, expense.id)
@@ -48,7 +43,7 @@ def list_expenses(
     db: Session = Depends(get_db),
 ):
     if start_date and end_date and start_date > end_date:
-        raise HTTPException(422, "start_date cannot be after end_date")
+        raise HTTPException(400, "تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد")
 
     q = db.query(Expense).options(joinedload(Expense.category))
     if category_id:
@@ -75,7 +70,7 @@ def auto_suggest_category(
 def get_expense(expense_id: int, db: Session = Depends(get_db)):
     expense = _reload(db, expense_id)
     if not expense:
-        raise HTTPException(404, "Expense not found")
+        raise HTTPException(404, "تراکنش پیدا نشد")
     return expense
 
 
@@ -83,18 +78,18 @@ def get_expense(expense_id: int, db: Session = Depends(get_db)):
 def update_expense(expense_id: int, payload: ExpenseUpdate, db: Session = Depends(get_db)):
     expense = db.get(Expense, expense_id)
     if not expense:
-        raise HTTPException(404, "Expense not found")
+        raise HTTPException(404, "تراکنش پیدا نشد")
 
     data = payload.model_dump(exclude_unset=True)
 
-    for field in ("amount", "description", "date", "category_id"):
+    for field in ("amount", "description", "date", "category_id", "tx_type"):
         if field in data and data[field] is None:
-            raise HTTPException(422, f"{field} cannot be null")
+            raise HTTPException(422, f"{field} نمی‌تواند خالی باشد")
 
     if "category_id" in data:
         cat = db.get(Category, data["category_id"])
         if not cat:
-            raise HTTPException(400, "Invalid category_id")
+            raise HTTPException(400, "دسته نامعتبر است")
 
     for k, v in data.items():
         setattr(expense, k, v)
@@ -107,6 +102,6 @@ def update_expense(expense_id: int, payload: ExpenseUpdate, db: Session = Depend
 def delete_expense(expense_id: int, db: Session = Depends(get_db)):
     expense = db.get(Expense, expense_id)
     if not expense:
-        raise HTTPException(404, "Expense not found")
+        raise HTTPException(404, "تراکنش پیدا نشد")
     db.delete(expense)
     db.commit()

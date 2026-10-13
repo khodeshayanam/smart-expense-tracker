@@ -1,6 +1,7 @@
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from ..database import get_db
 from ..models import Habit, HabitLog
@@ -66,7 +67,23 @@ def log_habit(payload: HabitLogCreate, db: Session = Depends(get_db)):
 
     log = HabitLog(**payload.model_dump())
     db.add(log)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = (
+            db.query(HabitLog)
+            .filter(HabitLog.habit_id == payload.habit_id, HabitLog.date == payload.date)
+            .first()
+        )
+        if existing:
+            existing.completed = payload.completed
+            if payload.notes is not None:
+                existing.notes = payload.notes
+            db.commit()
+            db.refresh(existing)
+            return existing
+        raise HTTPException(409, "لاگ این روز از قبل وجود دارد")
     db.refresh(log)
     return log
 
