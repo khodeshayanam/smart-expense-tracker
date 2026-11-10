@@ -36,3 +36,9 @@ Thumbs.db
 dist/
 build/
 *.egg-info/
+backend/.env
+
+# frontend
+frontend/node_modules
+frontend/dist
+frontend/.env
